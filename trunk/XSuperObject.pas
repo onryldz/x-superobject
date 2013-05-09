@@ -15,7 +15,7 @@
  * Unit owner : Onur YILDIZ <onryldz10@gmail.com>
  * Web site   : http://www.caracaldev.org
  *
- *) 
+ *)
 unit XSuperObject;
 
 interface
@@ -44,13 +44,15 @@ type
     procedure SetObject(V: Typ; const Value: ISuperObject);
     function GetArray(V: Typ): ISuperArray;
     procedure SetArray(V: Typ; const Value: ISuperArray);
+    function GetDouble(V: Typ): Double;
+    procedure SetDouble(V: Typ; const Value: Double);
 
     property S[V: Typ]: String read GetString write SetString;
     property I[V: Typ]: Int64 read GetInteger write SetInteger;
     property B[V: Typ]: Boolean read GetBoolean write SetBoolean;
+    property F[V: Typ]: Double read GetDouble write SetDouble;
     property O[V: Typ]: ISuperObject read GetObject write SetObject;
     property A[V: Typ]: ISuperArray read GetArray write SetArray;
-
     function asJSon: String;
   end;
 
@@ -111,7 +113,8 @@ type
   ISuperArray = interface(IBaseSuperObject<TJSONArray, Integer>)
     function GetLenght: Integer;
     property Lenght: Integer read GetLenght;
-    procedure Add(Value: Variant; DateFormat: TFormatSettings);
+    procedure Add(Value: Variant; DateFormat: TFormatSettings); overload;
+    procedure Add(Value: Variant); overload;
   end;
 
   TSuperObject = class(TBaseSuperObject<TJSONObject, String>, ISuperObject)
@@ -165,13 +168,16 @@ end;
 function TBaseSuperObject<T, Typ>.Member(const Name: String): Boolean;
 begin
   if FJSONObj is TJSONObject then
-    Result := Assigned(TJSONObject(FJSONObj).Get(NAme));
+    Result := Assigned(TJSONObject(FJSONObj).Get(NAme))
+  else
+    Result := Assigned(TJSONArray(FJSONObj).Get(StrToInt(Name)))
 end;
 
 procedure TBaseSuperObject<T, Typ>.Member<T>(const Name: String;
   const Value: Variant);
 var
   Pair: TJSONPair;
+  Index: Integer;
 begin
   if FJSONObj is TJSONObject then
   begin
@@ -188,7 +194,15 @@ begin
       Pair.JsonValue.Free;
 
     Pair.JsonValue := DefaultValueClass<T>(Value) as TJSONValue;
+  end
+  else
+  begin
+     Index := StrToInt(Name);
+     if TJSONArray(FJSONObj).Size-1 < Index then
+        while TJSONArray(FJSONObj).Size-1 < Index do
+          TJSONArray(FJSONObj).AddElement(DefaultValueClass<T>(Value) as TJSONValue);
   end;
+
 end;
 
 function TBaseSuperObject<T, Typ>.asJSon: String;
@@ -202,8 +216,7 @@ begin
   FJSONObjIsRef := True;
 end;
 
-function TBaseSuperObject<T, Typ>.DefaultValueClass<TT>
-  (const Value: Variant): TT;
+function TBaseSuperObject<T, Typ>.DefaultValueClass<TT>(const Value: Variant): TT;
 var
   r: TRttiContext;
   ty: TRttiType;
@@ -227,7 +240,7 @@ begin
   else
   begin
     r := TRttiContext.Create;
-    ty := r.GetType(TT);
+    ty := r.GetType(TClass(TT));
     if ty = nil then
       exit(Nil);
     try
