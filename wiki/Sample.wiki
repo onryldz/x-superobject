@@ -1,0 +1,99 @@
+*Sample JSON*
+{{{
+{
+  "name": "Onur YILDIZ", 
+  "vip": true,
+  "telephones": ["000000000", "111111111111"],
+  "age": 24,
+  "size": 1.72,
+  "adresses": [
+    {
+      "adress": "blabla",
+      "city": "Antalya",
+      "pc": 7160
+    },
+    {
+      "adress": "blabla",
+      "city": "Adana",
+      "pc": 1170
+    }
+  ]
+}
+}}}
+
+*Delphi Code*
+{{{
+var
+  X: ISuperObject;
+begin
+  X := TSuperObject.Create('{}');
+  X.S['name'] := 'Onur YILDIZ';
+  X.B['vip'] := true;
+  with X.A['telephones'] do
+  begin
+   Add('000000000');
+   Add('111111111111');
+  end;
+  X.I['age'] := 24;
+  X.F['size'] := 1.72;
+  with X.A['adresses'].O[0] {Auto Create} do
+  begin
+    S['adress'] := 'blabla';
+    S['city'] := 'Antalya';
+    I['pc'] := 7160;
+  end;
+  // or
+  X.A['adresses'].O[1].S['adress'] := 'blabla';
+  X.A['adresses'].O[1].S['city'] := 'Adana';
+  X.A['adresses'].O[1].I['pc'] := 1170;
+}}}
+
+
+
+
+*Sample 2*
+{{{
+const
+  JSN = '{ '+
+        ' "adresses": [ '+
+        '   { '+
+        '     "adress": "blabla", '+
+        '     "city": "Antalya", '+
+        '     "pc": 7160 '+
+        '   },'+
+        '   { '+
+        '     "adress": "blabla", '+
+        '     "city": "Adana", '+
+        '     "pc": 1170 '+
+        '   } '+
+        ' ] '+
+        '}';
+var
+  X, Obj: ISuperObject;
+  J: Integer;
+begin
+  X := TSuperObject.Create(JSN);
+  with X.A['adresses'] do
+    for J := 0 to Lenght -1 do
+    begin
+      Obj := O[J];
+      Obj.First;
+      while not Obj.EoF do
+      begin
+         Memo1.Lines.Add( Obj.CurrentKey + ' = ' + Obj.CurrentValue.Value );
+         Obj.Next;
+      end;
+      Memo1.Lines.Add('------');
+    end;
+end;
+}}}
+
+*Output*
+adress = blabla
+city = Antalya
+pc = 7160
+------
+adress = blabla
+city = Adana
+pc = 1170
+------
