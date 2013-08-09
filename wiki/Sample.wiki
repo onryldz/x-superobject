@@ -53,7 +53,7 @@ begin
 var 
   X: ISuperObject;
 begin 
-  X := TSuperObject.Creaet;
+  X := TSuperObject.Create;
   X.V['A'] := 1;
   X.V['B'] := '2';
   X.V['C'] := 1.3;
