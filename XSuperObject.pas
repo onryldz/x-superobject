@@ -29,6 +29,16 @@ uses
   TypInfo,
   Generics.Collections;
 
+ // ** Zero Based Stgins Definations...
+ {$UNDEF ZBS_ON}
+ {$IFDEF DCC}
+   {$IF CompilerVersion >= 24.0} {>=XE3}
+     {$IF Low(string) = 0}
+       {$DEFINE ZBS_ON}
+     {$ENDIF}
+   {$ENDIF}
+ {$ENDIF}
+
 type
 
   ISuperObject = interface;
@@ -888,7 +898,7 @@ begin
 
     tkChar,  tkWChar:
        if IJsonData.S[Member] > '' then
-          SetValue(Data, MemberValue, TValue.From<Char>(IJSonData.S[Member]{$IFDEF VER250}{XE4}.Char(1){$ELSE}[1]{$ENDIF}));
+          SetValue(Data, MemberValue, TValue.From<Char>(IJSonData.S[Member]{$IFDEF ZBS_ON}.Chars[0]{$ELSE}[1]{$ENDIF}));
 
     tkString,tkLString, tkWString, tkUString:
        SetValue(Data, MemberValue, IJSonData.S[Member]);
