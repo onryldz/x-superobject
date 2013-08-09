@@ -99,3 +99,62 @@ city = Adana
 pc = 1170
 }}}
 ------
+
+*Marshalling*
+{{{
+type
+
+  TTestSet = (ttA, ttB, ttC);
+
+  TTestSets = set of TTestSet;
+ 
+  TSubRec = record
+    A: Integer;
+    B: String; 
+  end;
+
+  TSubObj = class
+    A: Integer;
+    B: Integer; 
+  end;  
+  
+  TTest = class / record
+  private
+    FB: String;
+    FSubObj: TSubObj;
+    FSubRec: TSubRec;
+    FTestSets: TTestSets;
+  public
+    A: Integer;
+    B: TTestSet;
+    C: Boolean;
+    property D: String read FB write FB;
+    property E: TSubRec read FSubRec write FSubRec;
+    property F: TSubObj read FSubObj write FSubObj;
+    property G: TTestSets read FTestSets write FTestSets;
+  end.
+  
+  implementation
+  ...
+  
+  var Parse: TTest; // For Class;
+      S: String;
+  begin
+    Parse := TTest.ToJSON('{"A": 1, "B": 0, "C": true, "D": "Hello", "E":{"A": 3, "B": "Delphi"}, "F": {"A": 4, "B": 5}, "G": [0,2]}');
+  
+    S := Parse.AsJSON;
+  end;
+  
+  
+  ...
+  var Parse: TTest; // For Record;
+      S: String;
+  begin
+    Parse := TSuperRecord<TTest>.ToJSON('{"A": 1, "B": 0, "C": true, "D": "Hello", "E":{"A": 3, "B": "Delphi"}, "F": {"A": 4, "B": 5}, "G": [0,2]}');
+  
+    S := TSuperRecord<TTest>(Parse).AsJSON;
+  end;
+  
+  
+  
+}}}
