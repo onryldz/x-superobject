@@ -446,7 +446,7 @@ end;
 
 procedure TBaseJSON<T, Typ>.SetDouble(V: Typ; const Value: Double);
 begin
-
+  Member<TJSONNumber>(TValue.From<Typ>(V).AsVariant, Value);
 end;
 
 procedure TBaseJSON<T, Typ>.SetInteger(V: Typ; const Value: Int64);
