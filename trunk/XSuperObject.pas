@@ -465,11 +465,16 @@ begin
 end;
 
 procedure TBaseJSON<T, Typ>.SetVariant(V: Typ; const Value: Variant);
+var
+  VTyp: TVarType;
 begin
-  case GetType(V) of
-    varString:   S[V] := Value;
-    varInt64:    I[V] := Value;
-    varDouble:   F[V] := Value;
+  VTyp := GetType(V);
+  if VTyp = varUnknown then
+     VTyp := VarType(Value);
+  case VTyp of
+    varString, varUString:   S[V] := Value;
+    varInt64, varInteger, varByte:    I[V] := Value;
+    varDouble, varCurrency:   F[V] := Value;
     varBoolean:  B[V] := Value;
   end;
 end;
