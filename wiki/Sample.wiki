@@ -168,7 +168,7 @@ type
   begin
     Parse := TSuperRecord<TTest>.ToJSON('{"A": 1, "B": 0, "C": true, "D": "Hello", "E":{"A": 3, "B": "Delphi"}, "F": {"A": 4, "B": 5}, "G": [0,2]}');
   
-    S := TSuperRecord<TTest>(Parse).AsJSON;
+    S := TSuperRecord<TTest>.AsJSON(Parse);
   end;
   
   
