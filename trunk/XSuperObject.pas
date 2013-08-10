@@ -29,16 +29,6 @@ uses
   TypInfo,
   Generics.Collections;
 
- // ** Zero Based Stgins Definations...
- {$UNDEF ZBS_ON}
- {$IFDEF DCC}
-   {$IF CompilerVersion >= 24.0} {>=XE3}
-     {$IF Low(string) = 0}
-       {$DEFINE ZBS_ON}
-     {$ENDIF}
-   {$ENDIF}
- {$ENDIF}
-
 type
 
   ISuperObject = interface;
@@ -76,8 +66,9 @@ type
   end;
 
   TBaseJSON<T: Class; Typ> = class(TInterfacedObject, IBaseJSON<T, Typ>)
-  private
+  protected
     FJSONObj: T;
+  private
     FJSONObjIsRef: Boolean;
     function DefaultValueClass<TT: Class>(const Value: TValue): TT;
     procedure Member<T: Class>(const Name: String; const Value: TValue); overload;
@@ -147,6 +138,7 @@ type
     function GetCurrentValue: TJSONValue;
     function GetAsString: String;
     function GetOffset: Integer;
+
   public
     procedure First;
     procedure Next;
@@ -159,22 +151,23 @@ type
     property CurrentKey: String read GetCurrentKey;
     property CurrentValue: TJSONValue read GetCurrentValue;
     property AsString: String read GetAsString;
+
   end;
 
   ISuperArray = interface(IBaseJSON<TJSONArray, Integer>)
-    function GetLenght: Integer;
-    property Lenght: Integer read GetLenght;
+    function GetLength: Integer;
+    property Length: Integer read GetLength;
     procedure Add(Value: Variant; DateFormat: TFormatSettings); overload;
     procedure Add(Value: Variant); overload;
   end;
 
   TSuperArray = class(TBaseJSON<TJSONArray, Integer>, ISuperArray)
   private
-    function GetLenght: Integer;
+    function GetLength: Integer;
   public
     procedure Add(Value: Variant; DateFormat: TFormatSettings); overload;
     procedure Add(Value: Variant); overload;
-    property Lenght: Integer read GetLenght;
+    property Length: Integer read GetLength;
   end;
 
   TSerializeParse = class
@@ -219,16 +212,45 @@ type
     class function ToJSON(JSON: String): T;
   end;
 
+  function SO(JSON: String = '{}'): ISuperObject;
+  function SA(JSON: String = '[]'): ISuperArray;
+
 implementation
 
+ // ** Zero Based Strings Definations...
+ {$UNDEF XE2UP}
+ {$IFDEF DCC}
+   {$IF CompilerVersion >= 24}
+     {$DEFINE XE2UP}
+   {$IFEND}
+ {$ENDIF}
 
+ {$IFDEF XE2UP}
+   const CharIndex = Low(String);
+ {$ELSE}
+   const CharIndex = 1;
+ {$ENDIF}
+
+
+function SO(JSON: String): ISuperObject;
+begin
+  Result := TSuperObject.Create(JSON);
+end;
+
+function SA(JSON: String): ISuperArray;
+begin
+  Result := TSuperArray.Create(JSON);
+end;
 
 { TSuperObject }
 
 constructor TBaseJSON<T, Typ>.Create(JSON: String);
 begin
+  if (TypeInfo(T) = TypeInfo(TJSONArray)) and (JSON = '{}') then
+     JSON := '[]';
   FJSONObj := TJSONObject.ParseJSONValue(JSON) as T;
   FJSONObjIsRef := False;
+
 end;
 
 function TBaseJSON<T, Typ>.GetValue<T>(const Name: Typ): T;
@@ -607,7 +629,7 @@ begin
   Add(Value, FormatSettings);
 end;
 
-function TSuperArray.GetLenght: Integer;
+function TSuperArray.GetLength: Integer;
 begin
   Result := TJSONArray(FJSONObj).Size;
 end;
@@ -655,6 +677,7 @@ var
   Ctx: TRttiContext;
   Typ: TRttiType;
 begin
+
   Ctx := TRttiContext.Create;
   try
     Typ := Ctx.GetType(AObject.ClassType);
@@ -898,7 +921,7 @@ begin
 
     tkChar,  tkWChar:
        if IJsonData.S[Member] > '' then
-          SetValue(Data, MemberValue, TValue.From<Char>(IJSonData.S[Member]{$IFDEF ZBS_ON}.Chars[0]{$ELSE}[1]{$ENDIF}));
+          SetValue(Data, MemberValue, TValue.From<Char>(IJSonData.S[Member]{$IFDEF XE2UP}.Chars[CharIndex]{$ELSE}[CharIndex]{$ENDIF}));
 
     tkString,tkLString, tkWString, tkUString:
        SetValue(Data, MemberValue, IJSonData.S[Member]);
@@ -1017,7 +1040,7 @@ var
   I: Integer;
   Val: TValue;
 begin
-  for I := 0 to IJSONData.Lenght -1 do
+  for I := 0 to IJSONData.Length -1 do
       Include(Sets, IJSONData.I[I]);
   TValue.Make(Integer(Sets), GetMemberTypeInfo(Member), Val);
   SetValue(Data, Member, Val);
@@ -1041,7 +1064,7 @@ begin
   IData := TSuperObject.Create(JSON);
   P := IValueData(TValueData(Val).FValueData).GetReferenceToRawData;
   TSerializeParse.WriteRecord(Val.TypeInfo, P, IData);
-  Move(P^, Result, SizeOf(T));
+  Result := T(P^);
 end;
 
 end.
