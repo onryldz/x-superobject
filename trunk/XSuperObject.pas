@@ -24,7 +24,6 @@ uses
   Variants,
   SysUtils,
   DBXJSON,
-  Data.DBXJSONReflect,
   RTTI,
   TypInfo,
   Generics.Collections;
