@@ -64,6 +64,11 @@ type
     property Self: T read GetSelf;
   end;
 
+  TJSONValueHelper = class helper for TJSONValue
+  public
+    function ValueEx<T>: Variant;
+  end;
+
   TBaseJSON<T: Class; Typ> = class(TInterfacedObject, IBaseJSON<T, Typ>)
   protected
     FJSONObj: T;
@@ -269,9 +274,16 @@ end;
 function TBaseJSON<T, Typ>.GetValue<T>(const Name: Typ): T;
 begin
   if FJSONObj is TJSONObject then
-    Result := TJSONObject(FJSONObj).Get(TValue.From<Typ>(Name).AsString).JsonValue as T
+    with TJSONObject(FJSONObj).Get(TValue.From<Typ>(Name).AsString) do
+       if JsonValue is TJSONNull then
+          Result := Nil
+       else
+          Result := JSonValue as T
   else
+  if FJSONObj is TJSONArray then
     Result := TJSONArray(FJSONObj).Get(TValue.From<Typ>(Name).AsInteger) as T
+  else
+    Result := Nil;
 end;
 
 function TBaseJSON<T, Typ>.GetVariant(V: Typ): Variant;
@@ -392,7 +404,7 @@ function TBaseJSON<T, Typ>.GetBoolean(V: Typ): Boolean;
 begin
   Result := False;
   if Member(TValue.From<Typ>(V).AsVariant) then
-    Result := GetValue<TJSONValue>(V) is TJSONTrue;
+    Result := GetValue<TJSONValue>(V).ValueEx<Boolean>;
 end;
 
 function TBaseJSON<T, Typ>.GetData(Key: Typ): TJSONValue;
@@ -416,14 +428,14 @@ function TBaseJSON<T, Typ>.GetDouble(V: Typ): Double;
 begin
   Result := 0;
   if Member(TValue.From<Typ>(V).AsVariant) then
-    Result := GetValue<TJSONNumber>(V).AsDouble;
+    Result := GetValue<TJSONNumber>(V).ValueEx<Double>;
 end;
 
 function TBaseJSON<T, Typ>.GetInteger(V: Typ): Int64;
 begin
   Result := 0;
   if Member(TValue.From<Typ>(V).AsVariant) then
-    Result := GetValue<TJSONNumber>(V).AsInt64;
+    Result := GetValue<TJSONNumber>(V).ValueEx<Int64>;
 end;
 
 function TBaseJSON<T, Typ>.GetArray(V: Typ): ISuperArray;
@@ -448,7 +460,7 @@ function TBaseJSON<T, Typ>.GetString(V: Typ): String;
 begin
   Result := '';
   if Member(TValue.From<Typ>(V).AsVariant) then
-    Result := GetValue<TJSONString>(V).Value;
+    Result := GetValue<TJSONString>(V).ValueEx<String>;
 end;
 
 function TBaseJSON<T, Typ>.GetType(Key: Typ): TVarType;
@@ -1146,6 +1158,46 @@ begin
   P := IValueData(TValueData(Val).FValueData).GetReferenceToRawData;
   TSerializeParse.WriteRecord(Val.TypeInfo, P, IData);
   Result := T(P^);
+end;
+
+{ TJSONValueHelper }
+
+function TJSONValueHelper.ValueEx<T>: Variant;
+var
+  Valuable: Boolean;
+  pV: PTypeInfo;
+const
+  Int = 0;
+  Str = '';
+begin
+  Valuable := (Self <> Nil) and not Null;
+  pV := TypeInfo(T);
+  if pV = TypeInfo(Int64) then begin
+     if Valuable then
+        Result := (Self as TJSONNumber).AsInt64
+     else
+        Result := Int;
+  end
+  else
+  if pV = TypeInfo(Integer) then begin
+     if Valuable then
+        Result := (Self as TJSONNumber).AsDouble
+     else
+        Result := Int
+  end
+  else
+  if pV = TypeInfo(Boolean) then begin
+     if Valuable then
+        Result := Self is TJSONTrue
+     else
+        Result := False
+  end
+  else
+  if pV = TypeInfo(String) then
+     if Valuable then
+        Result := (Self as TJSONString).Value
+     else
+        Result := Str
 end;
 
 end.
