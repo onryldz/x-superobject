@@ -1179,7 +1179,7 @@ begin
         Result := Int;
   end
   else
-  if pV = TypeInfo(Integer) then begin
+  if pV = TypeInfo(Double) then begin
      if Valuable then
         Result := (Self as TJSONNumber).AsDouble
      else
