@@ -134,7 +134,7 @@ type
     B: Integer; 
   end;  
   
-  TTest = class / record
+  TTest = class // Field, Property Support
   private
     FB: String;
     FSubObj: TSubObj;
@@ -148,27 +148,37 @@ type
     property E: TSubRec read FSubRec write FSubRec;
     property F: TSubObj read FSubObj write FSubObj;
     property G: TTestSets read FTestSets write FTestSets;
-  end.
+  end;
+  
+  TTestRec = record // Only Field Support
+    A: Integer;
+    B: TTestSet;
+    C: Boolean;
+    D: String;
+    E: TSubRec;
+    F: TSubObj;
+    G: TTestSets;
+  end;
   
   implementation
   ...
   
-  var Parse: TTest; // For Class;
-      S: String;
+  var 
+    Parse: TTest; // For Class;
+    S: String;
   begin
     Parse := TTest.ToJSON('{"A": 1, "B": 0, "C": true, "D": "Hello", "E":{"A": 3, "B": "Delphi"}, "F": {"A": 4, "B": 5}, "G": [0,2]}');
-  
     S := Parse.AsJSON;
   end;
   
   
   ...
-  var Parse: TTest; // For Record;
-      S: String;
+  var
+    Parse: TTestRec; // For Record;
+    S: String;
   begin
-    Parse := TSuperRecord<TTest>.ToJSON('{"A": 1, "B": 0, "C": true, "D": "Hello", "E":{"A": 3, "B": "Delphi"}, "F": {"A": 4, "B": 5}, "G": [0,2]}');
-  
-    S := TSuperRecord<TTest>.AsJSON(Parse);
+    Parse := TSuperRecord<TTestRec>.ToJSON('{"A": 1, "B": 0, "C": true, "D": "Hello", "E":{"A": 3, "B": "Delphi"}, "F": {"A": 4, "B": 5}, "G": [0,2]}');  
+    S := TSuperRecord<TTestRec>.AsJSON(Parse);
   end;
   
   
