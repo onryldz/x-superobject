@@ -1153,6 +1153,7 @@ var
   Val: TValue;
   P: Pointer;
 begin
+  FillChar(Result, SizeOf(T), 0);
   Val := TValue.From<T>(Result);
   IData := TSuperObject.Create(JSON);
   P := IValueData(TValueData(Val).FValueData).GetReferenceToRawData;
