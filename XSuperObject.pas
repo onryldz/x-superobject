@@ -337,8 +337,15 @@ begin
 end;
 
 function TBaseJSON<T, Typ>.asJSon: String;
+var
+  Bytes: TBytes;
 begin
-  Result := TJSONValue(FJSONObj).ToString;
+  with TJSONValue(FJSONObj) do
+  begin
+     SetLength(Bytes, EstimatedByteSize);
+     SetLength(Bytes, ToBytes(Bytes, 0));
+  end;
+  Result := TEncoding.UTF8.GetString(Bytes);
 end;
 
 function TBaseJSON<T, Typ>.Contains(Key: Typ): Boolean;
