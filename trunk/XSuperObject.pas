@@ -221,13 +221,13 @@ type
   TSuperObjectHelper = class helper for TObject
   public
     function AsJSON: String;
-    constructor ToJSON(const JSON: String);
+    constructor FromJSON(const JSON: String);
   end;
 
   TSuperRecord<T: Record> = class
   public
     class function AsJSON(Rec: T): String;
-    class function ToJSON(JSON: String): T;
+    class function FromJSON(JSON: String): T;
   end;
 
   function SO(JSON: String = '{}'): ISuperObject;
@@ -680,7 +680,7 @@ begin
   end;
 end;
 
-constructor TSuperObjectHelper.ToJSON(const JSON: String);
+constructor TSuperObjectHelper.FromJSON(const JSON: String);
 var
   IData: ISuperObject;
 begin
@@ -1154,7 +1154,7 @@ begin
 end;
 
 
-class function TSuperRecord<T>.ToJSON(JSON: String): T;
+class function TSuperRecord<T>.FromJSON(JSON: String): T;
 var
   IData: ISuperObject;
   Val: TValue;
