@@ -167,7 +167,7 @@ type
     Parse: TTest; // For Class;
     S: String;
   begin
-    Parse := TTest.ToJSON('{"A": 1, "B": 0, "C": true, "D": "Hello", "E":{"A": 3, "B": "Delphi"}, "F": {"A": 4, "B": 5}, "G": [0,2]}');
+    Parse := TTest.FromJSON('{"A": 1, "B": 0, "C": true, "D": "Hello", "E":{"A": 3, "B": "Delphi"}, "F": {"A": 4, "B": 5}, "G": [0,2]}');
     S := Parse.AsJSON;
   end;
   
@@ -177,7 +177,7 @@ type
     Parse: TTestRec; // For Record;
     S: String;
   begin
-    Parse := TSuperRecord<TTestRec>.ToJSON('{"A": 1, "B": 0, "C": true, "D": "Hello", "E":{"A": 3, "B": "Delphi"}, "F": {"A": 4, "B": 5}, "G": [0,2]}');  
+    Parse := TSuperRecord<TTestRec>.FromJSON('{"A": 1, "B": 0, "C": true, "D": "Hello", "E":{"A": 3, "B": "Delphi"}, "F": {"A": 4, "B": 5}, "G": [0,2]}');  
     S := TSuperRecord<TTestRec>.AsJSON(Parse);
   end;
   
