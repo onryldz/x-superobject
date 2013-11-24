@@ -23,7 +23,8 @@ uses
   Classes,
   Variants,
   SysUtils,
-  DBXJSON,
+  Character,
+  XSuperJSON,
   RTTI,
   TypInfo,
   Generics.Collections;
@@ -33,7 +34,13 @@ type
   ISuperObject = interface;
   ISuperArray = interface;
 
-  IBaseJSON<T: Class; Typ> = interface
+  IBase = interface
+  end;
+
+  TBase = class(TInterfacedObject, IBase)
+  end;
+
+  IBaseJSON<T, Typ> = interface(IBase)
     function GetBoolean(V: Typ): Boolean;
     function GetInteger(V: Typ): Int64;
     function GetString(V: Typ): String;
@@ -61,42 +68,45 @@ type
     function GetType(Key: Typ): TVarType;
 
     function AsJSON: String;
+
     property Self: T read GetSelf;
   end;
 
-  TJSONValueHelper = class helper for TJSONValue
+  TJSONValueHelper = class helper for TJSONAncestor
   public
     function ValueEx<T>: Variant;
   end;
 
-  TBaseJSON<T: Class; Typ> = class(TInterfacedObject, IBaseJSON<T, Typ>)
+  TBaseJSON<T, Typ> = class(TBase, IBaseJSON<T, Typ>)
   protected
     FJSONObj: T;
+    FInterface: IInterface;
+    function ContainsEx(Key: Typ; Value: IJSONAncestor): Boolean;
   private
-    FJSONObjIsRef: Boolean;
-    function DefaultValueClass<TT: Class>(const Value: TValue): TT;
+    function  DefaultValueClass<TT: Class>(const Value: TValue): TT;
     procedure Member<T: Class>(const Name: String; const Value: TValue); overload;
-    function Member(const Name: String): Boolean; overload;
-    function GetValue<T: Class>(const Name: Typ): T;
-    function GetBoolean(V: Typ): Boolean;
-    function GetInteger(V: Typ): Int64;
-    function GetString(V: Typ): String;
-    procedure SetBoolean(V: Typ; const Value: Boolean);
-    procedure SetInteger(V: Typ; const Value: Int64);
-    procedure SetString(V: Typ; const Value: String);
-    function GetObject(V: Typ): ISuperObject;
-    procedure SetObject(V: Typ; const Value: ISuperObject);
-    function GetArray(V: Typ): ISuperArray;
-    procedure SetArray(V: Typ; const Value: ISuperArray);
-    function GetDouble(V: Typ): Double;
-    procedure SetDouble(V: Typ; const Value: Double);
-    function GetSelf: T;
-    function GetData(Key: Typ): TJSONValue;
-    function GetVariant(V: Typ): Variant;
+    function  Member(const Name: String): Boolean; overload;
+    function  GetValue<C: Class>(const Name: Typ): C;
+    function  GetSelf: T;
+    function  GetData(Key: Typ): IJSONAncestor;
+    function  GetVariant(V: Typ): Variant;
     procedure SetVariant(V: Typ; const Value: Variant);
+  protected
+    function GetObject(V: Typ): ISuperObject; virtual;
+    function GetArray(V: Typ): ISuperArray; virtual;
+    function GetBoolean(V: Typ): Boolean; virtual;
+    function GetInteger(V: Typ): Int64; virtual;
+    function GetString(V: Typ): String; virtual;
+    function GetDouble(V: Typ): Double; virtual;
+    procedure SetObject(V: Typ; const Value: ISuperObject); virtual;
+    procedure SetArray(V: Typ; const Value: ISuperArray); virtual;
+    procedure SetBoolean(V: Typ; const Value: Boolean); virtual;
+    procedure SetInteger(V: Typ; const Value: Int64); virtual;
+    procedure SetString(V: Typ; const Value: String); virtual;
+    procedure SetDouble(V: Typ; const Value: Double); virtual;
   public
     constructor Create(JSON: String = '{}'); overload;
-    constructor Create(JSON: TJSONValue); overload;
+    constructor Create(JSON: T); overload;
     destructor Destroy; override;
     property S[V: Typ]: String read GetString write SetString;
     property I[V: Typ]: Int64 read GetInteger write SetInteger;
@@ -107,71 +117,173 @@ type
     property V[V: Typ]: Variant read GetVariant write SetVariant;
     function Contains(Key: Typ): Boolean;
     function GetType(Key: Typ): TVarType;
-    function AsJSON: String;
+    function AsJSON: String; inline;
     property Self: T read GetSelf;
   end;
 
-  ISuperObject = interface(IBaseJSON<TJSONObject, String>)
+  TDataType = (dtNil, dtNull, dtObject, dtArray, dtString, dtInteger, dtFloat, dtBoolean);
+
+  ICast = interface
+    function GetArray: ISuperArray;
+    function GetBoolean: Boolean;
+    function GetDataType: TDataType;
+    function GetFloat: Double;
+    function GetInteger: Int64;
+    function GetObject: ISuperObject;
+    function GetString: String;
+    function GetName: String;
+    procedure SetBoolean(const Value: Boolean);
+    procedure SetFloat(const Value: Double);
+    procedure SetInteger(const Value: Int64);
+    procedure SetString(const Value: String);
+
+    property AsObject: ISuperObject read GetObject;
+    property AsArray: ISuperArray read GetArray;
+    property AsString: String read GetString write SetString;
+    property AsInteger: Int64 read GetInteger write SetInteger;
+    property AsFloat: Double read GetFloat write SetFloat;
+    property AsBoolean: Boolean read GetBoolean write SetBoolean;
+    property DataType: TDataType read GetDataType;
+    property Name: String read GetName;
+    function ToString: String;
+  end;
+
+  TCast = class(TInterfacedObject, ICast)
+  private
+    FJSON: IJSONAncestor;
+    FName: String;
+    function GetArray: ISuperArray;
+    function GetBoolean: Boolean;
+    function GetDataType: TDataType;
+    function GetFloat: Double;
+    function GetInteger: Int64;
+    function GetObject: ISuperObject;
+    function GetString: String;
+    procedure SetBoolean(const Value: Boolean);
+    procedure SetFloat(const Value: Double);
+    procedure SetInteger(const Value: Int64);
+    procedure SetString(const Value: String);
+    function GetName: String;
+  public
+    constructor Create(Base: IJSONAncestor); overload;
+    constructor Create(Base: IJSONPair); overload;
+    class function CreateFrom<T>(Base: T): ICast;
+    destructor Destroy; override;
+    property AsObject: ISuperObject read GetObject;
+    property AsArray: ISuperArray read GetArray;
+    property AsString: String read GetString write SetString;
+    property AsInteger: Int64 read GetInteger write SetInteger;
+    property AsFloat: Double read GetFloat write SetFloat;
+    property AsBoolean: Boolean read GetBoolean write SetBoolean;
+    property DataType: TDataType read GetDataType;
+    property Name: String read GetName;
+    function ToString: String;
+  end;
+
+  IMember = ICast;
+
+  ISuperExpression = interface(ICast)
+  end;
+
+  TSuperExpression = class(TCast, ISuperExpression)
+  private
+    FInterpreter: TJSONInterpreter;
+  public
+    constructor Create(Base: IJSONAncestor; const Expr: String);
+    destructor Destroy; override;
+  end;
+
+  TMemberStatus = (jUnAssigned, jNull, jAssigned);
+
+  TSuperEnumerator<T> = record
+    Index : Integer;
+    List : TJSONEnumerator<T>;
+    function MoveNext : Boolean;
+    function GetCurrent : ICast;
+    property Current : ICast read GetCurrent;
+  end;
+
+  ISuperObject = interface(IBaseJSON<IJSONObject, String>)
     procedure First;
     procedure Next;
-
     function GetEoF: Boolean;
     function GetCount: Integer;
     function GetCurrentKey: String;
-    function GetCurrentValue: TJSONValue;
-    function GetAsString: String;
+    function GetCurrentValue: IJSONAncestor;
     function GetOffset: Integer;
+    function GetNull(V: String): TMemberStatus;
+    procedure SetNull(V: String; const Value: TMemberStatus);
+    function  GetExpr(const Code: String): ISuperExpression;
 
     procedure SetData(V: String; Data: Variant); overload;
     procedure SetData(V: String; Data: Variant; AFormatSettings: TFormatSettings); overload;
 
+    procedure SaveTo(Stream: TStream); overload;
+    procedure SaveTo(AFile: String); overload;
+
+    property Null[V: String]: TMemberStatus read GetNull write SetNull;
+    property Expression[const Code: String]: ISuperExpression read GetExpr; default;
     property Count: Integer read GetCount;
     property EoF: Boolean read GetEoF;
     property CurrentKey: String read GetCurrentKey;
-    property CurrentValue: TJSONValue read GetCurrentValue;
-    property AsString: String read GetAsString;
+    property CurrentValue: IJSONAncestor read GetCurrentValue;
     property Offset: Integer read GetOffset;
+    function GetEnumerator: TSuperEnumerator<IJSONPair>;
   end;
 
-  TSuperObject = class(TBaseJSON<TJSONObject, String>, ISuperObject)
+  TSuperObject = class(TBaseJSON<IJSONObject, String>, ISuperObject)
   private
     FOffset: Integer;
     function GetEoF: Boolean;
     function GetCount: Integer;
     function GetCurrentKey: String;
-    function GetCurrentValue: TJSONValue;
-    function GetAsString: String;
+    function GetCurrentValue: IJSONAncestor;
     function GetOffset: Integer;
-
+    function GetNull(V: String): TMemberStatus;
+    procedure SetNull(V: String; const Value: TMemberStatus);
+    function  GetExpr(const Code: String): ISuperExpression;
+  protected
+    function GetString(V: String): String; override;
   public
     procedure First;
     procedure Next;
     procedure SetData(V: String; Data: Variant); overload; inline;
     procedure SetData(V: String; Data: Variant; AFormatSettings: TFormatSettings); overload;
 
+    class function ParseStream(Stream: TStream): TSuperObject;
+    class function ParseFile(FileName: String): TSuperObject;
+
+    procedure SaveTo(Stream: TStream); overload;
+    procedure SaveTo(AFile: String); overload;
+
+    property Null[V: String]: TMemberStatus read GetNull write SetNull;
+    property Expression[const Code: String]: ISuperExpression read GetExpr; default;
     property Count: Integer read GetCount;
     property Offset: Integer read GetOffset;
     property EoF: Boolean read GetEoF;
     property CurrentKey: String read GetCurrentKey;
-    property CurrentValue: TJSONValue read GetCurrentValue;
-    property AsString: String read GetAsString;
-
+    property CurrentValue: IJSONAncestor read GetCurrentValue;
+    function GetEnumerator: TSuperEnumerator<IJSONPair>;
   end;
 
-  ISuperArray = interface(IBaseJSON<TJSONArray, Integer>)
+  ISuperArray = interface(IBaseJSON<IJSONArray, Integer>)
     function GetLength: Integer;
     property Length: Integer read GetLength;
     procedure Add(Value: Variant; DateFormat: TFormatSettings); overload;
     procedure Add(Value: Variant); overload;
+    procedure Delete(Index: Integer);
+    function GetEnumerator: TSuperEnumerator<IJSONAncestor>;
   end;
 
-  TSuperArray = class(TBaseJSON<TJSONArray, Integer>, ISuperArray)
+  TSuperArray = class(TBaseJSON<IJSONArray, Integer>, ISuperArray)
   private
     function GetLength: Integer;
   public
     procedure Add(Value: Variant; DateFormat: TFormatSettings); overload;
     procedure Add(Value: Variant); overload;
+    procedure Delete(Index: Integer);
     property Length: Integer read GetLength;
+    function GetEnumerator: TSuperEnumerator<IJSONAncestor>;
   end;
 
   TSuperProperty = class(TRttiProperty)
@@ -189,9 +301,9 @@ type
     // ** Read
     class procedure ReadObject(AObject: TObject; IResult: ISuperObject);
     class procedure ReadRecord(Info: PTypeInfo; ARecord: Pointer; IResult: ISuperObject);
-    class function  ReadRecordEx<T: Record>(Rec: T): String;
+    class function  ReadRecordEx<T: Record>(Rec: T): ISuperObject;
     class procedure ReadMembers(Data: Pointer; aType: TRttiType; IJsonData: ISuperObject);
-    class procedure ReadMember<T: Class; Typ>(Member: Typ; TypeKind: TTypeKind; MemberValue: TValue; IJsonData: IBaseJSON<T, Typ>);
+    class procedure ReadMember<T, Typ>(Member: Typ; TypeKind: TTypeKind; MemberValue: TValue; IJsonData: IBaseJSON<T, Typ>);
 
     class procedure ReadSet(Val: TValue; IJsonData: ISuperArray);
     class procedure ReadVariantOfArray(Val: Variant; IJsonData: ISuperArray);
@@ -203,7 +315,7 @@ type
     class procedure WriteRecord(Info: PTypeInfo; ARecord: Pointer; IData: ISuperObject);
     class procedure WriteRecordEx<T: Record>(Rec: T; IData: ISuperObject);
     class procedure WriteMembers(Data: Pointer; aType: TRttiType; IJsonData: ISuperObject);
-    class procedure WriteMember<T: Class; Typ>(Data: Pointer; Member: Typ; TypeKind: TTypeKind; MemberValue: TRttiMember; IJsonData: IBaseJSON<T, Typ>);
+    class procedure WriteMember<T, Typ>(Data: Pointer; Member: Typ; TypeKind: TTypeKind; MemberValue: TRttiMember; IJsonData: IBaseJSON<T, Typ>);
     class procedure WriteSet(Data: Pointer; Member: TRttiMember; IJSONData: ISuperArray);
     class procedure SetValue<Typ>(Data: Pointer; Member: TRttiMember; MIdx: Typ; Val: TValue);
     class function  GetValue<Typ>(Data: Pointer; Member: TRttiMember; MIdx: Typ): TValue;
@@ -221,13 +333,17 @@ type
   TSuperObjectHelper = class helper for TObject
   public
     function AsJSON: String;
-    constructor FromJSON(const JSON: String);
+    function AsJSONObject: ISuperObject;
+    constructor FromJSON(const JSON: String); overload;
+    constructor FromJSON(JSON: ISuperObject); overload;
   end;
 
   TSuperRecord<T: Record> = class
   public
     class function AsJSON(Rec: T): String;
-    class function FromJSON(JSON: String): T;
+    class function AsJSONObject(Rec: T): ISuperObject;
+    class function FromJSON(JSON: String): T; overload;
+    class function FromJSON(JSON: ISuperObject): T; overload;
   end;
 
   function SO(JSON: String = '{}'): ISuperObject;
@@ -263,25 +379,29 @@ end;
 { TSuperObject }
 
 constructor TBaseJSON<T, Typ>.Create(JSON: String);
+var
+  M: TValue;
+  JVal: IJSONAncestor;
 begin
-  if (TypeInfo(T) = TypeInfo(TJSONArray)) and (Trim(JSON) = '{}') then
+  if (Self.InheritsFrom(TSuperArray)) and (Trim(JSON) = '{}') then
      JSON := '[]';
-  FJSONObj := TJSONObject.ParseJSONValue(JSON) as T;
-  FJSONObjIsRef := False;
-
+  JVal := TJSONObject.ParseJSONValue(JSON);
+  TValue.Make(@JVal, TypeInfo(T), M);
+  FJSONObj := M.AsType<T>;
+  FInterface := TVAlue.From<T>(FJSONObj).AsInterface;
 end;
 
-function TBaseJSON<T, Typ>.GetValue<T>(const Name: Typ): T;
+function TBaseJSON<T, Typ>.GetValue<C>(const Name: Typ): C;
 begin
-  if FJSONObj is TJSONObject then
-    with TJSONObject(FJSONObj).Get(TValue.From<Typ>(Name).AsString) do
+  if Self.InheritsFrom(TSuperObject) then
+    with TJSONObject(FInterface).Get(TValue.From<Typ>(Name).AsString) do
        if JsonValue is TJSONNull then
           Result := Nil
        else
-          Result := JSonValue as T
+          Result := JSonValue as C
   else
-  if FJSONObj is TJSONArray then
-    Result := TJSONArray(FJSONObj).Get(TValue.From<Typ>(Name).AsInteger) as T
+  if Self.InheritsFrom(TSuperArray) then
+    Result := TJSONArray(FInterface).Get(TValue.From<Typ>(Name).AsInteger) as C
   else
     Result := Nil;
 end;
@@ -300,52 +420,51 @@ end;
 
 function TBaseJSON<T, Typ>.Member(const Name: String): Boolean;
 begin
-  if FJSONObj is TJSONObject then
-    Result := Assigned(TJSONObject(FJSONObj).Get(NAme))
+  if Self.InheritsFrom(TSuperObject) then
+    Result := Assigned(TJSONObject(FInterface).Get(NAme))
   else
-    Result := Assigned(TJSONArray(FJSONObj).Get(StrToInt(Name)))
+    Result := Assigned(TJSONArray(FInterface).Get(StrToInt(Name)))
 end;
 
 procedure TBaseJSON<T, Typ>.Member<T>(const Name: String; const Value: TValue);
 var
-  Pair: TJSONPair;
+  Pair: IJSONPair;
   Index: Integer;
 begin
-  if FJSONObj is TJSONObject then
+  if Self.InheritsFrom(TSuperObject) then
   begin
-    Pair := TJSONObject(FJSONObj).Get(Name);
-
+    Pair := TJSONObject(FInterface).Get(Name);
     if not Assigned(Pair) then
     begin
-      TJSONObject(FJSONObj).AddPair(Name, (DefaultValueClass<T>(Value) as TJSONValue));
-      exit;
+      TJSONObject(FInterface).AddPair(Name, DefaultValueClass<T>(Value) as TJSONAncestor );
+      Exit;
     end;
-
     if Assigned(Pair.JsonValue) then
-      Pair.JsonValue.Free;
-
-    Pair.JsonValue := DefaultValueClass<T>(Value) as TJSONValue;
+      Pair.JsonValue := Nil;
+    Pair.JsonValue := DefaultValueClass<T>(Value) as TJSONAncestor;
   end
   else
   begin
     Index := StrToInt(Name);
-    if TJSONArray(FJSONObj).Size - 1 < Index then
-      while TJSONArray(FJSONObj).Size - 1 < Index do
-        TJSONArray(FJSONObj).AddElement(DefaultValueClass<T>(Value) as TJSONValue);
+    if TJSONArray(FInterface).Count - 1 < Index then
+      while TJSONArray(FInterface).Count - 1 < Index do
+        TJSONArray(FInterface).Add(DefaultValueClass<T>(Value) as TJSONAncestor);
   end;
 
 end;
 
-function TBaseJSON<T, Typ>.asJSon: String;
+function TBaseJSON<T, Typ>.AsJSON: String;
 var
-  Bytes: TBytes;
+  SBuild: TStringBuilder;
 begin
-  with TJSONValue(FJSONObj) do
-  begin
-     SetLength(Bytes, EstimatedByteSize);
-     SetLength(Bytes, ToBytes(Bytes, 0));
+  try
+    SBuild := TStringBuilder.Create;
+    TJSONAncestor(FInterface).AsJSONString(SBuild);
+    Result := SBuild.ToString;
+  finally
+    SBuild.Free;
   end;
-  Result := TEncoding.UTF8.GetString(Bytes);
+
 end;
 
 function TBaseJSON<T, Typ>.Contains(Key: Typ): Boolean;
@@ -353,10 +472,16 @@ begin
   Result := GetData(Key) <> Nil;
 end;
 
-constructor TBaseJSON<T, Typ>.Create(JSON: TJSONValue);
+function TBaseJSON<T, Typ>.ContainsEx(Key: Typ; Value: IJSONAncestor): Boolean;
 begin
-  FJSONObj := JSON as T;
-  FJSONObjIsRef := True;
+  Value := GetData(Key);
+  Result := Value <> Nil;
+end;
+
+constructor TBaseJSON<T, Typ>.Create(JSON: T);
+begin
+  FJSONObj := JSON;
+  FInterface := TValue.From<T>(JSON).AsInterface;
 end;
 
 function TBaseJSON<T, Typ>.DefaultValueClass<TT>(const Value: TValue): TT;
@@ -367,17 +492,30 @@ var
 begin
   if TJSONString.InheritsFrom(TT) then
     Result := TJSONString.Create(Value.AsString) as TT
-  else if TJSONNumber.InheritsFrom(TT) then
-    Result := TJSONNumber.Create(Value.AsVariant) as TT
+  else if TJSONInteger.InheritsFrom(TT) then
+    Result := TJSONInteger.Create(Value.AsVariant) as TT
+  else if TJSONFloat.InheritsFrom(TT) then
+    Result := TJSONFloat.Create(Value.AsVariant) as TT
+  else if TJSONBoolean.InheritsFrom(TT) then
+    Result := TJSONBoolean.Create(Value.AsBoolean) as TT
+  else if TJSONArray.InheritsFrom(TT) then
+  begin
+    if not Value.IsEmpty then
+      with Value do
+      begin
+        Result := AsInterface as TT;
+        Exit;
+      end;
+    Result := TJSONArray.Create as TT;
+  end
   else if TJSONObject.InheritsFrom(TT) then
   begin
     if not Value.IsEmpty then
       with Value do
-        if IsObject then
-        begin
-          Result := AsObject as TT;
-          exit;
-        end;
+      begin
+        Result := AsInterface as TT;
+        Exit;
+      end;
     Result := TJSONObject.Create as TT;
   end
   else
@@ -399,11 +537,6 @@ end;
 
 destructor TBaseJSON<T, Typ>.Destroy;
 begin
-  if not FJSONObjIsRef then
-  begin
-    FJSONObj.Free;
-    FJSONObj := Nil;
-  end;
   inherited;
 end;
 
@@ -411,47 +544,49 @@ function TBaseJSON<T, Typ>.GetBoolean(V: Typ): Boolean;
 begin
   Result := False;
   if Member(TValue.From<Typ>(V).AsVariant) then
-    Result := GetValue<TJSONValue>(V).ValueEx<Boolean>;
+    Result := GetValue<TJSONAncestor>(V).ValueEx<Boolean>;
 end;
 
-function TBaseJSON<T, Typ>.GetData(Key: Typ): TJSONValue;
+function TBaseJSON<T, Typ>.GetData(Key: Typ): IJSONAncestor;
 var
-  P: TJsonPair;
+  P: IJsonPair;
 begin
-  if FJSONObj is TJSONObject then
+  if Self.InheritsFrom(TSuperObject) then
   begin
-     P := TJSonObject(FJSonObj).Get(TValue.From<Typ>(Key).AsString);
+     P := TJSONObject(FInterface).Get(TValue.From<Typ>(Key).AsString);
      if Assigned(P) then
         Result := P.JsonValue
      else
         Result := Nil
   end
   else
-  if FJSONObj is TJSONArray then
-     Result := TJSONArray(FJSonObj).Get(TValue.From<Typ>(Key).AsInteger);
+  if Self.InheritsFrom(TSuperArray) then
+     Result := TJSONArray(FInterface).Get(TValue.From<Typ>(Key).AsInteger);
 end;
 
 function TBaseJSON<T, Typ>.GetDouble(V: Typ): Double;
 begin
   Result := 0;
   if Member(TValue.From<Typ>(V).AsVariant) then
-    Result := GetValue<TJSONNumber>(V).ValueEx<Double>;
+    Result := GetValue<TJSONFloat>(V).ValueEx<Double>;
 end;
 
 function TBaseJSON<T, Typ>.GetInteger(V: Typ): Int64;
 begin
   Result := 0;
   if Member(TValue.From<Typ>(V).AsVariant) then
-    Result := GetValue<TJSONNumber>(V).ValueEx<Int64>;
+    Result := GetValue<TJSONInteger>(V).ValueEx<Int64>;
 end;
 
 function TBaseJSON<T, Typ>.GetArray(V: Typ): ISuperArray;
+var
+  J: IJSONArray;
 begin
   Result := Nil;
   if not Member(TValue.From<Typ>(V).AsVariant) then
-    Member<TJSONArray>(TValue.From<Typ>(V).AsVariant, TValue.Empty);
-
-  Result := TSuperArray.Create(GetValue<TJSONArray>(V));
+     Member<TJSONArray>(TValue.From<Typ>(V).AsVariant, TValue.Empty);
+  J := GetValue<TJSONArray>(V);
+  Result := TSuperArray.Create(J);
 end;
 
 function TBaseJSON<T, Typ>.GetObject(V: Typ): ISuperObject;
@@ -472,55 +607,50 @@ end;
 
 function TBaseJSON<T, Typ>.GetType(Key: Typ): TVarType;
 var
-  Temp: TJSONValue;
+  Temp: IJSONAncestor;
 begin
   Temp := GetData(Key);
   if Temp = Nil then
      Result := varUnknown
-  else if Temp.ClassType = TJSONString then
+  else if Temp is TJSONString then
      Result := varString
-  else if Temp.ClassType = TJSONNumber then begin
-     if Pos('.', TJSONNumber(Temp).Value) > 0 then
-        Result := varDouble
-     else
-        Result := varInt64
-  end
-  else if Temp.ClassType = TJSONNull then
+  else if Temp is TJSONFloat then
+     Result := varDouble
+  else if Temp is TJSONInteger then
+      Result := varInt64
+  else if Temp is TJSONNull then
      Result := varNull
-  else if Temp.ClassType = TJSONObject then
+  else if Temp is TJSONObject then
      Result := varObject
-  else if Temp.ClassType = TJSONArray then
+  else if Temp is TJSONArray then
      Result := varArray
-  else if (Temp.ClassType = TJSONTrue) or (Temp.ClassType = TJSONFalse) then
+  else if Temp is TJSONBoolean then
      Result := varBoolean
 end;
 
 procedure TBaseJSON<T, Typ>.SetArray(V: Typ; const Value: ISuperArray);
 begin
-
+  Member<TJSONArray>(TValue.From<Typ>(V).AsVariant, TValue.From<IJSONArray>(Value.Self) )
 end;
 
 procedure TBaseJSON<T, Typ>.SetBoolean(V: Typ; const Value: Boolean);
 begin
-  if Value then
-    Member<TJSONTrue>(TValue.From<Typ>(V).AsVariant, TValue.Empty)
-  else
-    Member<TJSONFalse>(TValue.From<Typ>(V).AsVariant, TValue.Empty)
+  Member<TJSONBoolean>(TValue.From<Typ>(V).AsVariant, Value)
 end;
 
 procedure TBaseJSON<T, Typ>.SetDouble(V: Typ; const Value: Double);
 begin
-  Member<TJSONNumber>(TValue.From<Typ>(V).AsVariant, Value);
+  Member<TJSONFloat>(TValue.From<Typ>(V).AsVariant, Value);
 end;
 
 procedure TBaseJSON<T, Typ>.SetInteger(V: Typ; const Value: Int64);
 begin
-  Member<TJSONNumber>(TValue.From<Typ>(V).AsVariant, Value);
+  Member<TJSONInteger>(TValue.From<Typ>(V).AsVariant, Value);
 end;
 
 procedure TBaseJSON<T, Typ>.SetObject(V: Typ; const Value: ISuperObject);
 begin
-  Member<TJSONObject>(TValue.From<Typ>(V).AsVariant, TValue.From<T>(Value.Self) );
+  Member<TJSONObject>(TValue.From<Typ>(V).AsVariant, TValue.From<IJSONObject>(Value.Self) )
 end;
 
 procedure TBaseJSON<T, Typ>.SetString(V: Typ; const Value: String);
@@ -536,10 +666,14 @@ begin
   if VTyp = varUnknown then
      VTyp := VarType(Value);
   case VTyp of
-    varString, varUString:   S[V] := Value;
-    varInt64, varInteger, varByte:    I[V] := Value;
-    varDouble, varCurrency:   F[V] := Value;
-    varBoolean:  B[V] := Value;
+    varString, varUString:
+       S[V] := Value;
+    varInt64, varInteger, varByte:
+       I[V] := Value;
+    varDouble, varCurrency:
+       F[V] := Value;
+    varBoolean:
+       B[V] := Value;
   end;
 end;
 
@@ -556,24 +690,25 @@ begin
   FOffset := 0;
 end;
 
-function TSuperObject.GetAsString: String;
-begin
-  Result := FJSONObj.Value;
-end;
-
 function TSuperObject.GetCount: Integer;
 begin
-  Result := FJSONObj.Size;
+  Result := FJSONObj.Count;
 end;
 
 function TSuperObject.GetCurrentKey: String;
 begin
-  Result := FJSONObj.Get(FOffset).JsonString.Value;
+  Result := FJSONObj.Get(FOffset).Name;
 end;
 
-function TSuperObject.GetCurrentValue: TJSONValue;
+function TSuperObject.GetCurrentValue: IJSONAncestor;
 begin
   Result := FJSONObj.Get(FOffset).JsonValue;
+end;
+
+function TSuperObject.GetEnumerator: TSuperEnumerator<IJSONPair>;
+begin
+  Result.Index := -1;
+  Result.List := TJSONObject(FJSONObj).GetEnumerator
 end;
 
 function TSuperObject.GetEoF: Boolean;
@@ -581,9 +716,32 @@ begin
   Result := FOffset > Count - 1;
 end;
 
+function TSuperObject.GetExpr(const Code: String): ISuperExpression;
+begin
+  Result := TSuperExpression.Create(FJSONObj, Code);
+end;
+
+function TSuperObject.GetNull(V: String): TMemberStatus;
+var
+  Val: IJSONAncestor;
+begin
+  if ContainsEx(V, Val) then begin
+     if Val is TJSONNull then
+        Result := jNull
+     else
+        Result := jAssigned
+  end else
+        Result := jUnAssigned;
+end;
+
 function TSuperObject.GetOffset: Integer;
 begin
   Result := FOffset;
+end;
+
+function TSuperObject.GetString(V: String): String;
+begin
+  Result := inherited GetString(V);
 end;
 
 procedure TSuperObject.Next;
@@ -591,34 +749,103 @@ begin
   Inc(FOffset);
 end;
 
+class function TSuperObject.ParseFile(FileName: String): TSuperObject;
+var
+  Strm: TFileStream;
+begin
+  Strm := TFileStream.Create(FileName, fmOpenRead, fmShareDenyWrite);
+  try
+    Result := ParseStream(Strm);
+  finally
+    Strm.Free;
+  end;
+end;
+
+class function TSuperObject.ParseStream(Stream: TStream): TSuperObject;
+var
+  Strm: TStringStream;
+begin
+  Strm := TStringStream.Create;
+  try
+    Strm.LoadFromStream(Stream);
+    Result := TSuperObject.Create( Strm.DataString );
+  finally
+    Strm.Free;
+  end;
+end;
+
+procedure TSuperObject.SaveTo(Stream: TStream);
+var
+  S: TStringStream;
+begin
+  S := TStringStream.Create( ToString );
+  try
+     S.SaveToStream(S);
+  finally
+     S.Free;
+  end;
+end;
+
+procedure TSuperObject.SaveTo(AFile: String);
+var
+  S: TStringStream;
+begin
+  S := TStringStream.Create( ToString );
+  try
+     S.SaveToFile(AFile);
+  finally
+     S.Free;
+  end;
+end;
+
 procedure TSuperObject.SetData(V: String; Data: Variant; AFormatSettings: TFormatSettings);
 begin
   case VarType(Data) of
     varNull:
-        FJSONObj.AddPair(V, TJSONNull.Create);
+        FJSONObj.AddPair(V, TJSONNull.Create(True));
 
     varDate:
-        FJSONObj.AddPair(V, DateTimeToStr(TDateTime(Data), AFormatSettings));
+        FJSONObj.AddPair(V, TJSONString.Create(DateTimeToStr(TDateTime(Data), AFormatSettings)));
 
     varInteger:
-        FJSONObj.AddPair(V, TJSONNumber.Create(Integer(Data)));
+        FJSONObj.AddPair(V, TJSONInteger.Create(Integer(Data)));
 
     varBoolean:
-        if Data then
-           FJSONObj.AddPair(V, TJSONTrue.Create)
-        else
-           FJSONObj.AddPair(V, TJSONFalse.Create);
+        FJSONObj.AddPair(V, TJSONBoolean.Create(Data));
 
     varString, varUString:
         FJSONObj.AddPair(V, TJSONString.Create(String(Data)));
 
     varDouble:
-        FJSONObj.AddPair(V, TJSONNumber.Create(Double(Data)));
+        FJSONObj.AddPair(V, TJSONFloat.Create(Double(Data)));
 
     vtCurrency:
-        FJSONObj.AddPair(V, TJSONNumber.Create(Currency(Data)));
+        FJSONObj.AddPair(V, TJSONFloat.Create(Currency(Data)));
 
-    varInt64: FJSONObj.AddPair(V, TJSONNumber.Create(Int64(Data)));
+    varInt64: FJSONObj.AddPair(V, TJSONInteger.Create(Int64(Data)));
+  end;
+end;
+
+procedure TSuperObject.SetNull(V: String; const Value: TMemberStatus);
+var
+  Val: IJSONAncestor;
+begin
+  if Value = jAssigned then
+     Exit;
+  with TJSONObject(FJSONObj) do begin
+       if ContainsEx(V, Val) then
+       begin
+          case Value of
+            jUnAssigned:
+              Remove(V);
+            jNull: begin
+              Remove(V);
+              AddPair(V, TJSONNull.Create(True));
+            end;
+          end;
+       end
+       else
+          AddPair(V, TJSONNull.Create(True));
   end;
 end;
 
@@ -633,25 +860,24 @@ procedure TSuperArray.Add(Value: Variant; DateFormat: TFormatSettings);
 begin
   if VarIsNull(Value) then
   begin
-    FJSONObj.AddElement(TJSONNull.Create);
+    FJSONObj.Add(TJSONNull.Create(True));
     exit;
   end;
 
   if VarType(Value) = varDate then
-    FJSONObj.Add(DateTimeToStr(TDateTime(Value), DateFormat))
+    FJSONObj.Add(TJSONString.Create(DateTimeToStr(TDateTime(Value), DateFormat)))
   else
     with TValue.FromVariant(Value) do
     begin
       case Kind of
         tkInteger, tkInt64:
-          FJSONObj.Add(Int64(Value));
+          FJSONObj.Add(TJSONInteger.Create(Int64(Value)));
 
         tkFloat:
-          FJSONObj.Add(Double(Value));
+          FJSONObj.Add(TJSONFloat.Create(Double(Value)));
 
         tkString, tkWChar, tkLString, tkWString, tkUString, tkChar:
-          FJSONObj.Add(String(Value));
-
+          FJSONObj.Add(TJSONString.Create(String(Value)));
       end;
     end;
 end;
@@ -661,23 +887,27 @@ begin
   Add(Value, FormatSettings);
 end;
 
+procedure TSuperArray.Delete(Index: Integer);
+begin
+  FJSONObj.Remove(Index);
+end;
+
+function TSuperArray.GetEnumerator: TSuperEnumerator<IJSONAncestor>;
+begin
+  Result.Index := -1;
+  Result.List := TJSONArray(FJSONObj).GetEnumerator
+end;
+
 function TSuperArray.GetLength: Integer;
 begin
-  Result := TJSONArray(FJSONObj).Size;
+  Result := TJSONArray(FJSONObj).Count;
 end;
 
 { TSuperObjectHelper }
 
-function TSuperObjectHelper.asJSon: String;
-var
-  IResult: ISuperObject;
+function TSuperObjectHelper.AsJSON: String;
 begin
-  try
-    IResult := TSuperObject.Create;
-    TSerializeParse.ReadObject(Self, IResult);
-  finally
-    Result := IResult.AsJSON;
-  end;
+  Result := AsJSONObject.AsJSON;
 end;
 
 constructor TSuperObjectHelper.FromJSON(const JSON: String);
@@ -689,7 +919,23 @@ begin
   TSerializeParse.WriteObject(Self, IData);
 end;
 
+function TSuperObjectHelper.AsJSONObject: ISuperObject;
+var
+  IResult: ISuperObject;
+begin
+  try
+    IResult := TSuperObject.Create;
+    TSerializeParse.ReadObject(Self, IResult);
+  finally
+    Result := IResult;
+  end;
+end;
 
+constructor TSuperObjectHelper.FromJSON(JSON: ISuperObject);
+begin
+  inherited Create;
+  TSerializeParse.WriteObject(Self, JSON);
+end;
 
 { TSerializeParse }
 
@@ -699,9 +945,9 @@ var
   Field: TRttiField;
 begin
   for Prop in aType.GetProperties do
-      ReadMember<TJSONObject, String>(Prop.Name, Prop.PropertyType.TypeKind, Prop.GetValue(Data), IJSonData);
+      ReadMember<IJSONObject, String>(Prop.Name, Prop.PropertyType.TypeKind, Prop.GetValue(Data), IJSonData);
   for Field in aType.GetFields do
-      ReadMember<TJSONObject, String>(Field.Name, Field.FieldType.TypeKind, Field.GetValue(Data), IJSonData);
+      ReadMember<IJSONObject, String>(Field.Name, Field.FieldType.TypeKind, Field.GetValue(Data), IJSonData);
 end;
 
 class procedure TSerializeParse.ReadObject(AObject: TObject; IResult: ISuperObject);
@@ -739,7 +985,7 @@ begin
   end;
 end;
 
-class function TSerializeParse.ReadRecordEx<T>(Rec: T): String;
+class function TSerializeParse.ReadRecordEx<T>(Rec: T): ISuperObject;
 var
   IResult: ISuperObject;
 begin
@@ -748,7 +994,7 @@ begin
     with TValue.From<T>(Rec) do
       ReadRecord(TypeInfo, GetReferenceToRawData, IResult);
   finally
-    Result := IResult.AsJSON;
+    Result := IResult;
   end;
 end;
 
@@ -818,8 +1064,6 @@ begin
      if GetArray and (TSuperField(Member).ArrayRawData <> Nil) then
         Result := TRttiDynamicArrayType(Result).ElementType;
   end;
-
-
 end;
 
 class function TSerializeParse.GetMemberTypeInfo(
@@ -922,7 +1166,7 @@ begin
            for I := 0 to GetArrayLength - 1 do
            begin
                SubVal := GetArrayElement(I);
-               ReadMember<TJSONArray, Integer>( I, SubVal.Kind, SubVal, IJsonData.A[Member]);
+               ReadMember<IJSONArray, Integer>( I, SubVal.Kind, SubVal, IJsonData.A[Member]);
            end;
 
     tkRecord:
@@ -1056,7 +1300,7 @@ begin
          DynArraySetLength(PPointer(SubVal.GetReferenceToRawData)^, SubVal.TypeInfo, 1, @J);
          SetValue<String>(Data, MemberValue,'', SubVal );
          for I := 0 to J-1 do
-             WriteMember<TJSONArray, Integer>
+             WriteMember<IJSONArray, Integer>
                         (SubVal.GetReferenceToRawArrayElement(I),
                          I,
                          GetMemberType(MemberValue).TypeKind,
@@ -1084,10 +1328,10 @@ var
 begin
   for Prop in aType.GetProperties do
       if Prop.PropertyType <> Nil then
-         WriteMember<TJSONObject, String>(Data, Prop.Name, Prop.PropertyType.TypeKind, TSuperProperty(Prop), IJSonData);
+         WriteMember<IJSONObject, String>(Data, Prop.Name, Prop.PropertyType.TypeKind, TSuperProperty(Prop), IJSonData);
   for Field in aType.GetFields do
       if Field.FieldType <> Nil then
-         WriteMember<TJSONObject, String>(Data, Field.Name, Field.FieldType.TypeKind, TSuperField(Field), IJSonData);
+         WriteMember<IJSONObject, String>(Data, Field.Name, Field.FieldType.TypeKind, TSuperField(Field), IJSonData);
 end;
 
 class procedure TSerializeParse.WriteObject(AObject: TObject;
@@ -1150,21 +1394,28 @@ end;
 
 class function TSuperRecord<T>.AsJSON(Rec: T): String;
 begin
+  Result := AsJSONOBject(Rec).AsJSON;
+end;
+
+class function TSuperRecord<T>.FromJSON(JSON: String): T;
+begin
+   Result := FromJSON(SO(JSON));
+end;
+
+class function TSuperRecord<T>.AsJSONObject(Rec: T): ISuperObject;
+begin
   Result := XSuperObject.TSerializeParse.ReadRecordEx<T>(Rec);
 end;
 
-
-class function TSuperRecord<T>.FromJSON(JSON: String): T;
+class function TSuperRecord<T>.FromJSON(JSON: ISuperObject): T;
 var
-  IData: ISuperObject;
   Val: TValue;
   P: Pointer;
 begin
   FillChar(Result, SizeOf(T), 0);
   Val := TValue.From<T>(Result);
-  IData := TSuperObject.Create(JSON);
   P := IValueData(TValueData(Val).FValueData).GetReferenceToRawData;
-  TSerializeParse.WriteRecord(Val.TypeInfo, P, IData);
+  TSerializeParse.WriteRecord(Val.TypeInfo, P, JSON);
   Result := T(P^);
 end;
 
@@ -1178,25 +1429,25 @@ const
   Int = 0;
   Str = '';
 begin
-  Valuable := (Self <> Nil) and not Null;
+  Valuable := (Self <> Nil) and not isNull;
   pV := TypeInfo(T);
   if pV = TypeInfo(Int64) then begin
      if Valuable then
-        Result := (Self as TJSONNumber).AsInt64
+        Result := (Self as TJSONInteger).Value
      else
         Result := Int;
   end
   else
   if pV = TypeInfo(Double) then begin
      if Valuable then
-        Result := (Self as TJSONNumber).AsDouble
+        Result := (Self as TJSONFloat).Value
      else
         Result := Int
   end
   else
   if pV = TypeInfo(Boolean) then begin
      if Valuable then
-        Result := Self is TJSONTrue
+        Result := (Self as TJSONBoolean).Value
      else
         Result := False
   end
@@ -1206,6 +1457,157 @@ begin
         Result := (Self as TJSONString).Value
      else
         Result := Str
+end;
+
+{ TSuperExpression }
+
+constructor TSuperExpression.Create(Base: IJSONAncestor; const Expr: String);
+begin
+  FInterpreter := TJSONInterpreter.Create(Expr, Base);
+  inherited Create(FInterpreter.ReadExpression);
+end;
+
+destructor TSuperExpression.Destroy;
+begin
+  FInterpreter.Free;
+  inherited;
+end;
+
+{ TCast }
+
+constructor TCast.Create(Base: IJSONAncestor);
+begin
+  FJSON := Base;
+  FName := '';
+end;
+
+constructor TCast.Create(Base: IJSONPair);
+begin
+  FJSON := Base.JSONValue;
+  FName := Base.Name;
+end;
+
+class function TCast.CreateFrom<T>(Base: T): ICast;
+var
+  IFace: IInterface;
+begin
+  IFace := TValue.From<T>(Base).AsInterface;
+  if IFace is TJSONAncestor then
+     Result := TCast.Create(IFace as TJSONAncestor)
+  else
+  if IFace is TJSONPair then
+     Result := TCast.Create(IFace as TJSONPair)
+end;
+
+destructor TCast.Destroy;
+begin
+  FJSON := Nil;
+  inherited;
+end;
+
+function TCast.GetArray: ISuperArray;
+begin
+  Result := TSuperArray.Create(FJSON as TJSONArray);
+end;
+
+function TCast.GetBoolean: Boolean;
+begin
+  Result := TJSONBoolean(FJSON).Value;
+end;
+
+function TCast.GetDataType: TDataType;
+begin
+  if FJSON = Nil then
+     Result := dtNil
+  else if FJSON is TJSONNull then
+     Result := dtNull
+  else if FJSON is TJSONString then
+     Result := dtString
+  else if FJSON is TJSONInteger then
+     Result := dtInteger
+  else if FJSON is TJSONFloat then
+     Result := dtFloat
+  else if FJSON is TJSONBoolean then
+     Result := dtBoolean
+  else if FJSON is TJSONObject then
+     Result := dtObject
+  else if FJSON is TJSONArray then
+     Result := dtArray
+  else
+     raise Exception.Create('Unknown JSON Type');
+end;
+
+function TCast.GetFloat: Double;
+begin
+  Result := TJSONFloat(FJSON).Value;
+end;
+
+function TCast.GetInteger: Int64;
+begin
+  Result := TJSONInteger(FJSON).Value;
+end;
+
+function TCast.GetName: String;
+begin
+  Result := FName;
+end;
+
+function TCast.GetObject: ISuperObject;
+begin
+  Result := TSuperObject.Create(FJSON as TJSONObject);
+end;
+
+function TCast.GetString: String;
+begin
+  Result := TJSONString(FJSON).Value;
+end;
+
+procedure TCast.SetBoolean(const Value: Boolean);
+begin
+  TJSONBoolean(FJSON).Value := Value;
+end;
+
+procedure TCast.SetFloat(const Value: Double);
+begin
+  TJSONFloat(FJSON).Value := Value;
+end;
+
+procedure TCast.SetInteger(const Value: Int64);
+begin
+  TJSONInteger(FJSON).Value := Value;
+end;
+
+procedure TCast.SetString(const Value: String);
+begin
+  TJSONString(FJSON).Value := Value;
+end;
+
+
+function TCast.ToString: String;
+var
+  SBuilder: TStringBuilder;
+begin
+  try
+    SBuilder := TStringBuilder.Create;
+    FJSON.AsJSONString(SBuilder);
+    Result := SBuilder.ToString;
+  finally
+    SBuilder.Free;
+  end;
+end;
+
+{ TJSONEnumerator<T> }
+
+function TSuperEnumerator<T>.GetCurrent: ICast;
+begin
+  Result := TCast.CreateFrom<T>(List.List[Index]);
+end;
+
+function TSuperEnumerator<T>.MoveNext: Boolean;
+begin
+  Result := Index < List.List.Count - 1;
+  if Result then
+    Inc(Index);
 end;
 
 end.
