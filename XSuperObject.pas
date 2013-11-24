@@ -271,6 +271,7 @@ type
     property Length: Integer read GetLength;
     procedure Add(Value: Variant; DateFormat: TFormatSettings); overload;
     procedure Add(Value: Variant); overload;
+    procedure Add(Value: IJSONAncestor); overload;
     procedure Delete(Index: Integer);
     function GetEnumerator: TSuperEnumerator<IJSONAncestor>;
   end;
@@ -281,6 +282,7 @@ type
   public
     procedure Add(Value: Variant; DateFormat: TFormatSettings); overload;
     procedure Add(Value: Variant); overload;
+    procedure Add(Value: IJSONAncestor); overload;
     procedure Delete(Index: Integer);
     property Length: Integer read GetLength;
     function GetEnumerator: TSuperEnumerator<IJSONAncestor>;
@@ -885,6 +887,11 @@ end;
 procedure TSuperArray.Add(Value: Variant);
 begin
   Add(Value, FormatSettings);
+end;
+
+procedure TSuperArray.Add(Value: IJSONAncestor);
+begin
+  FJSONObj.Add(Value);
 end;
 
 procedure TSuperArray.Delete(Index: Integer);
