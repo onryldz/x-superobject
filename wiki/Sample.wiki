@@ -48,6 +48,47 @@ begin
   X.A['adresses'].O[1].I['pc'] := 1170;
 }}}
 
+
+*Super Expression*
+{{{
+const
+  JSON = '{ "o": { '+
+         '    "1234567890": {'+
+         '    "last use date": "2010-10-17T01:23:20",'+
+         '    "create date": "2010-10-17T01:23:20",'+
+         '    "name": "iPhone 8s"'+
+         '	  }'+
+         '  },'+
+         '  "Index": 0, '+
+         '  "Data": {"Index2": 1}, '+
+         '  "a": [{'+
+         '    "last use date": "2010-10-17T01:23:20",'+
+         '    "create date": "2010-11-17T01:23:20",'+
+         '    "name": "iPhone 8s",'+
+         '    "arr": [1,2,3] '+
+         '  }, '+
+         '  {'+
+         '    message: "hello"'+
+         '  }]'+
+         '}';
+
+var
+  X: ISuperObject;
+  NewJSon: ISuperObject;
+  NewArray: ISuperArray;
+begin
+  X := SO(JSON);
+  ShowMessage( X['o."1234567890"."last use date"'].AsString );
+  ShowMessage( X['a[Index]."create date"'].AsString );
+  ShowMessage( X['a[Data.Index2].message'].AsString );
+  X['a[0].arr'].AsArray.Add('test1');
+  // -----
+  NewJSON := X['{a: a[Index], b: a[Data.Index2].message, c: o."1234567890".name, d: 4, e: a[0].arr[2], f: " :) "}'].AsObject;
+  NewArray := X['[a[Index], a[Data.Index2].message, Data.Index2, Index, 1, "1", "test"]'].AsArray;
+end;
+}}}
+
+
 *Variant*
 {{{
 var 
@@ -102,6 +143,23 @@ begin
       Memo1.Lines.Add('------');
     end;
 end;
+}}}
+
+*OR (Enumerator)*
+
+{{{
+var
+  X: ISuperObject;
+  AMember,
+  OMember: IMember;
+begin
+  X := TSuperObject.Create(JSN);
+
+  for AMember in X.A['adresses'] do
+      for OMember in AMember.AsObject do
+          Memo1.Lines.Add(OMember.Name + ' = ' + OMember.ToString);
+
+  Memo1.Lines.Add('------');
 }}}
 
 *Output*
