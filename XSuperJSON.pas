@@ -364,7 +364,7 @@ type
   TJumpTrigger = class(TTrigger, IJumpTrigger)
   end;
 
-  TRouteChars = set of AnsiChar;
+  TRouteChars = set of Char;
 
   TRoute = class
   private

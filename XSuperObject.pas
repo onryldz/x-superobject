@@ -1504,6 +1504,8 @@ begin
   else
   if IFace is TJSONPair then
      Result := TCast.Create(IFace as TJSONPair)
+  else
+     Result := TCast.Create(TJSONAncestor(Nil));
 end;
 
 destructor TCast.Destroy;
@@ -1514,12 +1516,18 @@ end;
 
 function TCast.GetArray: ISuperArray;
 begin
-  Result := TSuperArray.Create(FJSON as TJSONArray);
+  if not Assigned(FJSON) then
+     Result := Nil
+  else
+     Result := TSuperArray.Create(FJSON as TJSONArray);
 end;
 
 function TCast.GetBoolean: Boolean;
 begin
-  Result := TJSONBoolean(FJSON).Value;
+  if not Assigned(FJSON) then
+     Result := False
+  else
+     Result := TJSONBoolean(FJSON).Value;
 end;
 
 function TCast.GetDataType: TDataType;
@@ -1546,12 +1554,18 @@ end;
 
 function TCast.GetFloat: Double;
 begin
-  Result := TJSONFloat(FJSON).Value;
+  if not Assigned(FJSON) then
+     Result := 0
+  else
+     Result := TJSONFloat(FJSON).Value;
 end;
 
 function TCast.GetInteger: Int64;
 begin
-  Result := TJSONInteger(FJSON).Value;
+  if not Assigned(FJSON) then
+     Result := 0
+  else
+     Result := TJSONInteger(FJSON).Value;
 end;
 
 function TCast.GetName: String;
@@ -1561,31 +1575,41 @@ end;
 
 function TCast.GetObject: ISuperObject;
 begin
-  Result := TSuperObject.Create(FJSON as TJSONObject);
+  if not Assigned(FJSON) then
+     Result := Nil
+  else
+     Result := TSuperObject.Create(FJSON as TJSONObject);
 end;
 
 function TCast.GetString: String;
 begin
-  Result := TJSONString(FJSON).Value;
+  if not Assigned(FJSON) then
+     Result := ''
+  else
+     Result := TJSONString(FJSON).Value;
 end;
 
 procedure TCast.SetBoolean(const Value: Boolean);
 begin
+  if not Assigned(FJSON) then Exit;
   TJSONBoolean(FJSON).Value := Value;
 end;
 
 procedure TCast.SetFloat(const Value: Double);
 begin
+  if not Assigned(FJSON) then Exit;
   TJSONFloat(FJSON).Value := Value;
 end;
 
 procedure TCast.SetInteger(const Value: Int64);
 begin
+  if not Assigned(FJSON) then Exit;
   TJSONInteger(FJSON).Value := Value;
 end;
 
 procedure TCast.SetString(const Value: String);
 begin
+  if not Assigned(FJSON) then Exit;
   TJSONString(FJSON).Value := Value;
 end;
 
