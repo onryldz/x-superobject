@@ -132,10 +132,12 @@ type
     function GetObject: ISuperObject;
     function GetString: String;
     function GetName: String;
+    function GetVariant: Variant;
     procedure SetBoolean(const Value: Boolean);
     procedure SetFloat(const Value: Double);
     procedure SetInteger(const Value: Int64);
     procedure SetString(const Value: String);
+    procedure SetVariant(const Value: Variant);
 
     property AsObject: ISuperObject read GetObject;
     property AsArray: ISuperArray read GetArray;
@@ -143,6 +145,7 @@ type
     property AsInteger: Int64 read GetInteger write SetInteger;
     property AsFloat: Double read GetFloat write SetFloat;
     property AsBoolean: Boolean read GetBoolean write SetBoolean;
+    property AsVariant: Variant read GetVariant write SetVariant;
     property DataType: TDataType read GetDataType;
     property Name: String read GetName;
     function ToString: String;
@@ -164,6 +167,8 @@ type
     procedure SetInteger(const Value: Int64);
     procedure SetString(const Value: String);
     function GetName: String;
+    function GetVariant: Variant;
+    procedure SetVariant(const Value: Variant);
   public
     constructor Create(Base: IJSONAncestor); overload;
     constructor Create(Base: IJSONPair); overload;
@@ -175,6 +180,7 @@ type
     property AsInteger: Int64 read GetInteger write SetInteger;
     property AsFloat: Double read GetFloat write SetFloat;
     property AsBoolean: Boolean read GetBoolean write SetBoolean;
+    property AsVariant: Variant read GetVariant write SetVariant;
     property DataType: TDataType read GetDataType;
     property Name: String read GetName;
     function ToString: String;
@@ -1596,6 +1602,22 @@ begin
      Result := TJSONString(FJSON).Value;
 end;
 
+function TCast.GetVariant: Variant;
+begin
+   case DataType of
+     dtNil, dtNull, dtObject, dtArray:
+        Result := Null;
+     dtString:
+        Result := AsString;
+     dtInteger:
+        Result := AsInteger;
+     dtFloat:
+        Result := AsFloat;
+     dtBoolean:
+        Result := AsBoolean;
+   end;
+end;
+
 procedure TCast.SetBoolean(const Value: Boolean);
 begin
   if not Assigned(FJSON) then Exit;
@@ -1620,6 +1642,20 @@ begin
   TJSONString(FJSON).Value := Value;
 end;
 
+
+procedure TCast.SetVariant(const Value: Variant);
+begin
+  case DataType of
+     dtString:
+        AsString := VarToStr(Value);
+     dtInteger:
+        AsInteger := Value;
+     dtFloat:
+        AsFloat   := Value;
+     dtBoolean:
+        AsBoolean := Value;
+   end;
+end;
 
 function TCast.ToString: String;
 var
