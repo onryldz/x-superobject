@@ -866,22 +866,26 @@ begin
     exit;
   end;
 
-  if VarType(Value) = varDate then
-    FJSONObj.Add(TJSONString.Create(DateTimeToStr(TDateTime(Value), DateFormat)))
-  else
-    with TValue.FromVariant(Value) do
-    begin
-      case Kind of
-        tkInteger, tkInt64:
-          FJSONObj.Add(TJSONInteger.Create(Int64(Value)));
+  case VarType(Value) of
+    varDate :
+       FJSONObj.Add(TJSONString.Create(DateTimeToStr(TDateTime(Value), DateFormat)));
+    varBoolean:
+       FJSONObj.Add(TJSONBoolean.Create(Value));
 
-        tkFloat:
-          FJSONObj.Add(TJSONFloat.Create(Double(Value)));
+    else
+      with TValue.FromVariant(Value) do
+          case Kind of
+             tkInteger, tkInt64:
+                FJSONObj.Add(TJSONInteger.Create(Int64(Value)));
 
-        tkString, tkWChar, tkLString, tkWString, tkUString, tkChar:
-          FJSONObj.Add(TJSONString.Create(String(Value)));
-      end;
-    end;
+             tkFloat:
+                FJSONObj.Add(TJSONFloat.Create(Double(Value)));
+
+             tkString, tkWChar, tkLString, tkWString, tkUString, tkChar:
+                FJSONObj.Add(TJSONString.Create(String(Value)));
+          end;
+  end;
+
 end;
 
 procedure TSuperArray.Add(Value: Variant);
@@ -1166,7 +1170,10 @@ begin
 
     tkVariant:
        if TypeInfo(Typ) = TypeInfo(String) then
-          ReadVariantOfObject(MemberValue.AsVariant, TValue.From<Typ>(Member).AsString, ISuperObject(IJsonData));
+          ReadVariantOfObject(MemberValue.AsVariant, TValue.From<Typ>(Member).AsString, ISuperObject(IJsonData))
+       else
+       if TypeInfo(Typ) = TypeInfo(Integer) then
+          ReadVariantOfArray(MemberValue.AsVariant, ISuperArray(IJsonData) );
 
     tkArray, tkDynArray:
        with MemberValue do
