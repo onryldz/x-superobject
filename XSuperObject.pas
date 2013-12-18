@@ -1300,12 +1300,11 @@ begin
        end;
 
     tkVariant:
-       if TypeInfo(Typ) = TypeInfo(String) then
        begin
          V := IJSONData.V[Member];
          if not VarIsNull(V) then
          begin
-            TValue.Make(V, GetMemberTypeInfo(MemberValue), SubVal);
+            TValue.Make(@V, GetMemberTypeInfo(MemberValue), SubVal);
             SetValue<Typ>(Data, MemberValue, Member, SubVal);
          end;
        end;
