@@ -45,6 +45,8 @@ type
     Line: Integer;
   end;
 
+  TDataType = (dtNil, dtNull, dtObject, dtArray, dtString, dtInteger, dtFloat, dtBoolean);
+
   // ## Exception
 
   TJSONSyntaxError = class(Exception)
@@ -58,17 +60,28 @@ type
   // ---------------
 
   IJSONAncestor = interface
+    function GetAsVariant: Variant;
+    procedure SetAsVariant(const Value: Variant);
+    function GetDataType: TDataType;
     function GetIsNull: Boolean;
     procedure AsJSONString(Str: TStringBuilder);
     property IsNull: Boolean read GetIsNull;
+    property DataType: TDataType read GetDataType;
+    property AsVariant: Variant read GetAsVariant write SetAsVariant;
   end;
 
   TJSONAncestor = class abstract(TInterfacedObject, IJSONAncestor)
+  private
+    function GetAsVariant: Variant;
+    procedure SetAsVariant(const Value: Variant);
   protected
+    function GetDataType: TDataType; virtual;
     function GetIsNull: Boolean; virtual;
   public
     procedure AsJSONString(Str: TStringBuilder); virtual;
     property IsNull: Boolean read GetIsNull;
+    property DataType: TDataType read GetDataType;
+    property AsVariant: Variant read GetAsVariant write SetAsVariant;
   end;
 
   IJSONValue<T> = interface(IJSONAncestor)
@@ -455,6 +468,9 @@ type
 
 implementation
 
+uses
+  XSuperObject;
+
 const
   FloatFormat : TFormatSettings = ( DecimalSeparator : '.' );
   STokenTypes : array [TLexemType] of string = ('Nil',
@@ -537,9 +553,36 @@ begin
   Str.Append('');
 end;
 
+function TJSONAncestor.GetDataType: TDataType;
+begin
+  with TCast.Create(Self) do
+  begin
+     Result := DataType;
+     Free;
+  end;
+end;
+
 function TJSONAncestor.GetIsNull: Boolean;
 begin
   Result := Self is TJSONNull;
+end;
+
+function TJSONAncestor.GetAsVariant: Variant;
+begin
+  with TCast.Create(Self) do
+  begin
+     Result := AsVariant;
+     Free;
+  end;
+end;
+
+procedure TJSONAncestor.SetAsVariant(const Value: Variant);
+begin
+  with TCast.Create(Self) do
+  begin
+     AsVariant := Value;
+     Free;
+  end;
 end;
 
 { TTokenBuff }
