@@ -137,7 +137,7 @@ begin
       Obj.First;
       while not Obj.EoF do
       begin
-         Memo1.Lines.Add( Obj.CurrentKey + ' = ' + Obj.CurrentValue.Value );
+         Memo1.Lines.Add( Obj.CurrentKey + ' = ' + VarToStr(Obj.CurrentValue.AsVariant));
          Obj.Next;
       end;
       Memo1.Lines.Add('------');
@@ -156,10 +156,12 @@ begin
   X := TSuperObject.Create(JSN);
 
   for AMember in X.A['adresses'] do
+  begin
       for OMember in AMember.AsObject do
           Memo1.Lines.Add(OMember.Name + ' = ' + OMember.ToString);
 
-  Memo1.Lines.Add('------');
+      Memo1.Lines.Add('------');
+  end;
 }}}
 
 *Output*
