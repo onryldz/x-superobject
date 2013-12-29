@@ -121,7 +121,7 @@ type
     property Self: T read GetSelf;
   end;
 
-  TDataType = (dtNil, dtNull, dtObject, dtArray, dtString, dtInteger, dtFloat, dtBoolean);
+
 
   ICast = interface
     function GetArray: ISuperArray;
