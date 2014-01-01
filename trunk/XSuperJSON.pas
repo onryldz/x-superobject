@@ -215,6 +215,7 @@ type
     procedure Add(Val: IJSONAncestor);
     procedure Remove(Val: IJSONAncestor); overload;
     procedure Remove(Index: Integer); overload;
+    procedure Clear;
     function Count: Integer;
     function Get(const I: Integer): IJSONAncestor;
     function GetEnumerator: TJSONEnumerator<IJSONAncestor>;
@@ -234,6 +235,7 @@ type
     procedure Add(Val: IJSONAncestor);
     procedure Remove(Val: IJSONAncestor); overload;
     procedure Remove(Index: Integer); overload;
+    procedure Clear;
     function Count: Integer;
     function Get(const I: Integer): IJSONAncestor;
     function GetEnumerator: TJSONEnumerator<IJSONAncestor>;
@@ -1542,6 +1544,11 @@ begin
     end;
     Str.Append(']');
   end;
+end;
+
+procedure TJSONArray.Clear;
+begin
+  FList.Clear;
 end;
 
 function TJSONArray.Count: Integer;
