@@ -279,6 +279,7 @@ type
     procedure Add(Value: Variant); overload;
     procedure Add(Value: IJSONAncestor); overload;
     procedure Delete(Index: Integer);
+    procedure Clear;
     function GetEnumerator: TSuperEnumerator<IJSONAncestor>;
   end;
 
@@ -290,6 +291,7 @@ type
     procedure Add(Value: Variant); overload;
     procedure Add(Value: IJSONAncestor); overload;
     procedure Delete(Index: Integer);
+    procedure Clear;
     property Length: Integer read GetLength;
     function GetEnumerator: TSuperEnumerator<IJSONAncestor>;
   end;
@@ -798,7 +800,7 @@ procedure TSuperObject.SaveTo(AFile: String);
 var
   S: TStringStream;
 begin
-  S := TStringStream.Create( ToString );
+  S := TStringStream.Create( AsJSON );
   try
      S.SaveToFile(AFile);
   finally
@@ -902,6 +904,11 @@ end;
 procedure TSuperArray.Add(Value: IJSONAncestor);
 begin
   FJSONObj.Add(Value);
+end;
+
+procedure TSuperArray.Clear;
+begin
+  FJSONObj.Clear;
 end;
 
 procedure TSuperArray.Delete(Index: Integer);
