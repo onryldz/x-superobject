@@ -853,6 +853,7 @@ begin
   rFirst.Add([''''], TJumpTrigger.Create(rString2, [ttBuffer], ppNil));
   rFirst.Add(optNumeric, TUseRouteTrigger.Create(rInt, [ttBuffer], ppNil));
   rFirst.Add(optWhiteSpace - [#0], TJumpTrigger.Create(rFirst, [], ppNil));
+  rFirst.Add(['-'], TUseRouteTrigger.Create(rInt, [ttBuffer], ppNil));
   rFirst.NoRoute(TErrorTrigger.Create(ERR_UnexpectedTokenILLEGAL));
 
   rName.Add(optAll - optWhiteSpace - optSym, TUseRouteTrigger.Create(rName, [], ppNil));
@@ -1107,7 +1108,7 @@ var
     FLexem.Str := FBuffer.AsString;
   end;
 
-  procedure GetRoute; //inline;
+  procedure GetRoute;
   begin
     if FEscapeSupport then
      begin
@@ -1128,7 +1129,6 @@ var
        UseEscape := False;
      end;
   end;
-
 begin
   CreateLexeme;
   UseEscape := False;
