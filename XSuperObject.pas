@@ -31,8 +31,11 @@ uses
 
 type
 
+  SOException = class(Exception);
+
   ISuperObject = interface;
   ISuperArray = interface;
+  TSuperObject = class;
 
   IBase = interface
   end;
@@ -66,9 +69,7 @@ type
     property V[V: Typ]: Variant read GetVariant write SetVariant;
     function Contains(Key: Typ): Boolean;
     function GetType(Key: Typ): TVarType;
-
     function AsJSON: String;
-
     property Self: T read GetSelf;
   end;
 
@@ -235,6 +236,7 @@ type
     property CurrentValue: IJSONAncestor read GetCurrentValue;
     property Offset: Integer read GetOffset;
     function GetEnumerator: TSuperEnumerator<IJSONPair>;
+    function T: TSuperObject;
   end;
 
   TSuperObject = class(TBaseJSON<IJSONObject, String>, ISuperObject)
@@ -270,6 +272,8 @@ type
     property CurrentKey: String read GetCurrentKey;
     property CurrentValue: IJSONAncestor read GetCurrentValue;
     function GetEnumerator: TSuperEnumerator<IJSONPair>;
+    function AsType<T>: T;
+    function T: TSuperObject; inline;
   end;
 
   ISuperArray = interface(IBaseJSON<IJSONArray, Integer>)
@@ -311,7 +315,7 @@ type
     // ** Read
     class procedure ReadObject(AObject: TObject; IResult: ISuperObject);
     class procedure ReadRecord(Info: PTypeInfo; ARecord: Pointer; IResult: ISuperObject);
-    class function  ReadRecordEx<T: Record>(Rec: T): ISuperObject;
+    class function  ReadRecordEx<T>(Rec: T): ISuperObject;
     class procedure ReadMembers(Data: Pointer; aType: TRttiType; IJsonData: ISuperObject);
     class procedure ReadMember<T, Typ>(Member: Typ; TypeKind: TTypeKind; MemberValue: TValue; IJsonData: IBaseJSON<T, Typ>);
 
@@ -323,7 +327,7 @@ type
     // ** Write
     class procedure WriteObject(AObject: TObject; IData: ISuperObject);
     class procedure WriteRecord(Info: PTypeInfo; ARecord: Pointer; IData: ISuperObject);
-    class procedure WriteRecordEx<T: Record>(Rec: T; IData: ISuperObject);
+    class procedure WriteRecordEx<T>(Rec: T; IData: ISuperObject);
     class procedure WriteMembers(Data: Pointer; aType: TRttiType; IJsonData: ISuperObject);
     class procedure WriteMember<T, Typ>(Data: Pointer; Member: Typ; TypeKind: TTypeKind; MemberValue: TRttiMember; IJsonData: IBaseJSON<T, Typ>);
     class procedure WriteSet(Data: Pointer; Member: TRttiMember; IJSONData: ISuperArray);
@@ -348,13 +352,15 @@ type
     constructor FromJSON(JSON: ISuperObject); overload;
   end;
 
-  TSuperRecord<T: Record> = class
+  TBaseSuperRecord<T> = class
   public
     class function AsJSON(Rec: T): String;
     class function AsJSONObject(Rec: T): ISuperObject;
     class function FromJSON(JSON: String): T; overload;
     class function FromJSON(JSON: ISuperObject): T; overload;
   end;
+
+  TSuperRecord<T: Record> = class(TBaseSuperRecord<T>);
 
   function SO(JSON: String = '{}'): ISuperObject;
   function SA(JSON: String = '[]'): ISuperArray;
@@ -695,6 +701,31 @@ end;
 
 { TSuperObject }
 
+function TSuperObject.AsType<T>: T;
+var
+  Ctx: TRttiContext;
+  Typ: TRttiType;
+begin
+  Ctx := TRttiContext.Create;
+  try
+    Typ := Ctx.GetType(TypeInfo(T));
+    if not Assigned(Typ) then
+       Exit;
+    if Typ.IsRecord then
+       Result := TBaseSuperRecord<T>.FromJSON(Self)
+    else if Typ.IsInstance then
+    begin
+      Result := Typ.GetMethod('Create').Invoke(Typ.AsInstance.MetaclassType, []).AsType<T>;
+      TSerializeParse.WriteObject(TValue.From<T>(Result).AsObject, Self);
+    end
+    else
+      raise SOException.Create('Unsupported type.');
+  except
+    Ctx.Free;
+    raise;
+  end;
+end;
+
 procedure TSuperObject.First;
 begin
   FOffset := 0;
@@ -859,6 +890,11 @@ begin
   end;
 end;
 
+function TSuperObject.T: TSuperObject;
+begin
+  Result := Self;
+end;
+
 procedure TSuperObject.SetData(V: String; Data: Variant);
 begin
   SetData(V, Data, FormatSettings);
@@ -987,8 +1023,6 @@ begin
     ReadMembers(AObject, Typ, IResult) ;
   finally
     Ctx.Free;
-    if Assigned(Typ) then
-       Typ.Free;
   end;
 end;
 
@@ -1004,8 +1038,6 @@ begin
     ReadMembers(ARecord, Typ, IResult) ;
   finally
     Ctx.Free;
-    if Assigned(Typ) then
-       Typ.Free;
   end;
 end;
 
@@ -1122,7 +1154,6 @@ begin
     Typ := Ctx.GetType(Instance);
     Result := Typ.GetMethod('Create').Invoke(Instance, []).AsObject;
   finally
-    Typ.Free;
     Ctx.Free;
   end;
 end;
@@ -1143,8 +1174,6 @@ begin
     if not Assigned(Mtd) then Exit;
     Result := Length( Mtd.GetParameters );
   finally
-    if Assigned(Typ) then
-       Typ.Free;
     Ctx.Free;
   end;
 end;
@@ -1316,7 +1345,7 @@ begin
          end;
        end;
 
-    tkArray: raise Exception.Create('There is no support for static array.');
+    tkArray: raise SOException.Create('There is no support for static array.');
 
     tkDynArray:
        begin
@@ -1373,8 +1402,6 @@ begin
     WriteMembers(AObject, Typ, IData);
   finally
     Ctx.Free;
-    if Assigned(Typ) then
-       Typ.Free;
   end;
 end;
 
@@ -1391,8 +1418,6 @@ begin
     WriteMembers(ARecord, Typ, IData);
   finally
     Ctx.Free;
-    if Assigned(Typ) then
-       Typ.Free;
   end;
 end;
 
@@ -1418,22 +1443,22 @@ end;
 
 { TSuperRecord<T> }
 
-class function TSuperRecord<T>.AsJSON(Rec: T): String;
+class function TBaseSuperRecord<T>.AsJSON(Rec: T): String;
 begin
   Result := AsJSONOBject(Rec).AsJSON;
 end;
 
-class function TSuperRecord<T>.FromJSON(JSON: String): T;
+class function TBaseSuperRecord<T>.FromJSON(JSON: String): T;
 begin
    Result := FromJSON(SO(JSON));
 end;
 
-class function TSuperRecord<T>.AsJSONObject(Rec: T): ISuperObject;
+class function TBaseSuperRecord<T>.AsJSONObject(Rec: T): ISuperObject;
 begin
   Result := XSuperObject.TSerializeParse.ReadRecordEx<T>(Rec);
 end;
 
-class function TSuperRecord<T>.FromJSON(JSON: ISuperObject): T;
+class function TBaseSuperRecord<T>.FromJSON(JSON: ISuperObject): T;
 var
   Val: TValue;
   P: Pointer;
@@ -1568,7 +1593,7 @@ begin
   else if FJSON is TJSONArray then
      Result := dtArray
   else
-     raise Exception.Create('Unknown JSON Type');
+     raise SOException.Create('Unknown JSON Type');
 end;
 
 function TCast.GetFloat: Double;
