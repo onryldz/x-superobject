@@ -20,7 +20,7 @@ unit XSuperJSON;
 interface
 
 uses
-  SysUtils, Classes, Generics.Collections;
+  SysUtils, Classes, Generics.Collections, Math;
 
 
 const
@@ -292,16 +292,19 @@ type
   TLexemTypes = set of TLexemType;
 
   TLexBuff = class
+  public
     Capacity: Integer;
     Length : Integer;
-    Buff: array of WideChar;
-    function AsString: String;
+    Buff: PWideChar;
+    constructor Create;
+    destructor Destroy; override;
+    function AsString: String; inline;
     function AsInt64: Int64;
     function AsDouble: Double;
     function AsType: TLexemType;
     function AsHInt: Int64;
-    procedure Add(Ch: WideChar);
-    procedure Grow(ACount: Integer);
+    procedure Add(Ch: PWideChar); inline;
+    procedure Grow;
     procedure Clear; inline;
   end;
 
@@ -318,48 +321,21 @@ type
 
   TTriggerProcs = set of (ttBuffer, ttEnd, ttBack);
 
-  ITrigger = interface
-    function GetNextRoute: TRoute;
-    procedure SetNextRoute(const Value: TRoute);
-    function GetParseProcs: TParseProc;
-    function GetTriggerProcs: TTriggerProcs;
-    procedure SetParseProcs(const Value: TParseProc);
-    procedure SetTriggerProcs(const Value: TTriggerProcs);
-
-    property NextRoute: TRoute read GetNextRoute write SetNextRoute;
-    property TriggerProcs: TTriggerProcs read GetTriggerProcs write SetTriggerProcs;
-    property ParseProcs: TParseProc read GetParseProcs write SetParseProcs;
-  end;
-
-  TTrigger = class(TInterfacedObject, ITrigger)
-  private
-    FTriggerProcs: TTriggerProcs;
-    FParseProcs: TParseProc;
-    FNextRoute: TRoute;
-    function GetNextRoute: TRoute;
-    procedure SetNextRoute(const Value: TRoute);
-    function GetParseProcs: TParseProc; inline;
-    function GetTriggerProcs: TTriggerProcs; inline;
-    procedure SetParseProcs(const Value: TParseProc);
-    procedure SetTriggerProcs(const Value: TTriggerProcs);
+  TTrigger = class
   public
+    TriggerProcs: TTriggerProcs;
+    ParseProcs: TParseProc;
+    NextRoute: TRoute;
+    BF: Boolean;
+    ED: Boolean;
+    BK: Boolean;
     constructor Create(NextRoute: TRoute; TriggerProcs: TTriggerProcs; ParseProcs: TParseProc);
-    property NextRoute: TRoute read GetNextRoute write SetNextRoute;
-    property TriggerProcs: TTriggerProcs read GetTriggerProcs write SetTriggerProcs;
-    property ParseProcs: TParseProc read GetParseProcs write SetParseProcs;
   end;
 
-  IErrorTrigger = interface
-    function GetMeessage: String;
-    procedure SetMessage(const Value: String);
-
-    property Message: String read GetMeessage write SetMessage;
-  end;
-
-  TErrorTrigger = class(TTrigger, IErrorTrigger)
+  TErrorTrigger = class(TTrigger)
   private
     FMessage: String;
-    function GetMeessage: String; inline;
+    function GetMeessage: String;
     procedure SetMessage(const Value: String);
   public
     constructor Create(const Message: String);
@@ -367,16 +343,13 @@ type
   end;
 
 
-  INoRouteTrigger = interface(ITrigger) end;
-  TNoRouteTrigger = class(TTrigger, INoRouteTrigger)
+  TNoRouteTrigger = class(TTrigger)
   end;
 
-  IUseRouteTrigger = interface(ITrigger) end;
-  TUseRouteTrigger = class(TTrigger, IUseRouteTrigger)
+  TUseRouteTrigger = class(TTrigger)
   end;
 
-  IJumpTrigger = interface(ITrigger) end;
-  TJumpTrigger = class(TTrigger, IJumpTrigger)
+  TJumpTrigger = class(TTrigger)
   end;
 
   TRouteChars = set of Char;
@@ -384,16 +357,16 @@ type
   TRoute = class
   private
     FName: String;
-    FTriggers: array[#0..MaxCHR] of ITrigger;
-    function GetIndex(Ch: WideChar): ITrigger; inline;
+    FTriggers: array[#0..MaxCHR] of TTrigger;
+    function GetIndex(Ch: WideChar): TTrigger; inline;
     function GetName: String;
   public
     constructor Create(const Name: String);
-    property Index[Ch: WideChar]: ITrigger read GetIndex;
     property Name: String read GetName;
-    procedure Add(const Chars: TRouteChars; Trigger: ITrigger);
-    procedure NoRoute(Trigger: ITrigger);
-    property Index[Ch: WideChar]: ITrigger read GetIndex; default;
+    procedure Add(const Chars: TRouteChars; Trigger: TTrigger);
+    procedure NoRoute(Trigger: TTrigger);
+    function TryGetRoute(Ch: WideChar; var Trg: TTrigger): Boolean; inline;
+    property Index[Ch: WideChar]: TTrigger read GetIndex; default;
   end;
 
   TLexGrammar = class
@@ -457,8 +430,6 @@ type
     function  CheckKill(LTyp: TLexemType): Boolean; overload;
     function  CheckKill(LTyp: TLexemTypes): TLexemType; overload;
     function  Current: ILexeme; inline;
-  public
-
   end;
 
   TSuperParser = class
@@ -587,14 +558,15 @@ begin
   end;
 end;
 
-{ TTokenBuff }
+{ TLexBuff }
 
-procedure TLexBuff.Add(Ch: WideChar);
+procedure TLexBuff.Add(Ch: PWideChar);
 begin
-  if Length >= Capacity then
-     Grow(256);
-  Buff[Length] := Ch;
+  if Capacity = 0 then Exit;
+  if (Length >=  Capacity - Length) then Grow;
+  Buff[Length] := Ch^;
   Inc(Length);
+  Buff[Length] := #0;
 end;
 
 function TLexBuff.AsDouble: Double;
@@ -639,13 +611,7 @@ end;
 
 function TLexBuff.AsString: String;
 begin
-  if Length = 0 then
-     Result := ''
-  else
-  begin
-     SetLength(Result, Length);
-     Move(Buff[0], Pointer(Result)^, Length*SizeOf(WideChar));
-  end;
+  SetString(Result, Buff, Length);
 end;
 
 function TLexBuff.AsType: TLexemType;
@@ -677,20 +643,28 @@ end;
 procedure TLexBuff.Clear;
 begin
   Length := 0;
-  Capacity := 0;
+  Buff[0] := #0;
 end;
 
-procedure TLexBuff.Grow(ACount: Integer);
+constructor TLexBuff.Create;
 begin
-  if Capacity = 0 then
-    Capacity := ACount
-  else
-    repeat
-      Capacity := Capacity * 2;
-      if Capacity < 0 then
-        OutOfMemoryError;
-    until Capacity >= ACount;
-  SetLength(Buff, Capacity);
+  inherited;
+  Length := 0;
+  Capacity := 32;
+  GetMem(Buff, Capacity * SizeOf(PWideChar));
+end;
+
+destructor TLexBuff.Destroy;
+begin
+  if Assigned(Buff) then
+     FreeMem(Buff);
+  inherited;
+end;
+
+procedure TLexBuff.Grow;
+begin
+   Capacity := Math.Max(Capacity * 2, Length + 8);
+   ReallocMem(Buff, Capacity * SizeOf(WideChar));
 end;
 
 { TSuperParser }
@@ -710,47 +684,22 @@ end;
 
 { TTrigger }
 
+{ TTrigger }
+
 constructor TTrigger.Create(NextRoute: TRoute; TriggerProcs: TTriggerProcs;
   ParseProcs: TParseProc);
 begin
-  FNextRoute := NextRoute;
-  FTriggerProcs := TriggerProcs;
-  FParseProcs := ParseProcs;
-end;
-
-function TTrigger.GetNextRoute: TRoute;
-begin
-  Result := FNextRoute;
-end;
-
-function TTrigger.GetParseProcs: TParseProc;
-begin
-  Result := FParseProcs;
-end;
-
-function TTrigger.GetTriggerProcs: TTriggerProcs;
-begin
-  Result := FTriggerProcs;
-end;
-
-procedure TTrigger.SetNextRoute(const Value: TRoute);
-begin
-  FNextRoute := Value;
-end;
-
-procedure TTrigger.SetParseProcs(const Value: TParseProc);
-begin
-  FParseProcs := Value;
-end;
-
-procedure TTrigger.SetTriggerProcs(const Value: TTriggerProcs);
-begin
-  FTriggerProcs := Value;
+  Self.NextRoute := NextRoute;
+  Self.ParseProcs := ParseProcs;
+  Self.TriggerProcs := TriggerProcs;
+  BF := ttBuffer in TriggerProcs;
+  ED := ttEnd in TriggerProcs;
+  BK := ttBack in TriggerProcs;
 end;
 
 { TRoute }
 
-procedure TRoute.Add(const Chars: TRouteChars; Trigger: ITrigger);
+procedure TRoute.Add(const Chars: TRouteChars; Trigger: TTrigger);
 var
   Ch: WideChar;
 begin
@@ -769,7 +718,8 @@ begin
   FName := Name;
 end;
 
-function TRoute.GetIndex(Ch: WideChar): ITrigger;
+
+function TRoute.GetIndex(Ch: WideChar): TTrigger;
 begin
   if Ch > MaxCHR then Ch := MaxCHR;
   Result := FTriggers[Ch];
@@ -780,7 +730,7 @@ begin
   Result := FName;
 end;
 
-procedure TRoute.NoRoute(Trigger: ITrigger);
+procedure TRoute.NoRoute(Trigger: TTrigger);
 var
   Ch: WideChar;
 begin
@@ -791,6 +741,18 @@ begin
         FTriggers[Ch] := Trigger;
      Inc(Ch);
   end;
+end;
+
+function TRoute.TryGetRoute(Ch: WideChar; var Trg: TTrigger): Boolean;
+begin
+  if Ch > MaxCHR then Ch := MaxCHR;
+  if FTriggers[Ch] <> nil then
+  begin
+     Result := True;
+     Trg := FTriggers[Ch];
+  end
+  else
+     Result := False;
 end;
 
 { TLexGrammar }
@@ -926,7 +888,7 @@ begin
   FMessage := Value;
 end;
 
-{ TParser }
+{ TLexGenerator }
 
 function TLexGenerator.Check(LTyp: TLexemTypes): TLexemType;
 begin
@@ -1055,100 +1017,46 @@ end;
 procedure TLexGenerator.NextLex;
 var
   Route: TRoute;
-  Trigger: ITrigger;
-  PBuffer: TLexBuff;
+  Trigger: TTrigger;
+  CTyp: TClass;
   UseEscape, UseEscapeEnd: Boolean;
-
-  procedure ParseProc;
+begin
+  CreateLexeme;
+  UseEscape := False;
+  UseEscapeEnd := False;
+  FBuffer.Clear;
+  if FEscapeSupport then
   begin
-    case Trigger.ParseProcs of
-      ppInteger: begin
-         FLexem.Int := FBuffer.AsInt64;
-         FLexem.LType := ltIValue;
-      end;
-      ppDouble:begin
-         FLexem.Dbl := FBuffer.AsDouble;
-         FLexem.LType := ltDValue;
-      end;
-      ppString:begin
-         FLexem.LType := ltSValue;
-      end;
-
-      ppName: begin
-         FLexem.Str := FBuffer.AsString;
-         FLexem.LType := FBuffer.AsType;
-      end;
-
-      ppEscapeUChar: begin
-         if FEscapeBuff.Length = 4 then
-         begin
-            FBuffer.Add( Chr(FEscapeBuff.AsHInt) );
-            FEscapeBuff.Clear;
-            UseEscapeEnd := True;
-         end;
-      end;
-
-      ppEscape: begin
-         case FEscapeBuff.Buff[0] of
-           'b' : FBuffer.Add(#8);
-           't' : FBuffer.Add(#9);
-           'n' : FBuffer.Add(#10);
-           'v' : FBuffer.Add(#11);
-           'f' : FBuffer.Add(#12);
-           'r' : FBuffer.Add(#13);
-           '\' : FBuffer.Add('\');
-           '"' : FBuffer.Add('"');
-           '''': FBuffer.Add('''');
-         else
-           FBuffer.Add(FEscapeBuff.Buff[0]);
-         end;
-         FEscapeBuff.Clear;
-      end;
-    end;
-    FLexem.Str := FBuffer.AsString;
+    FEscapeRoute := FLexG.EscapeRoute;
+    FEscapeBuff.Clear;
   end;
 
-  procedure GetRoute;
+  Route := FFirstRoute;
+  while Assigned(Route) do
   begin
-    if FEscapeSupport then
+
+     if FEscapeSupport then
      begin
         Trigger := FEscapeRoute[FCurr^];
-        if not Assigned(Trigger) then
+        if Trigger = Nil then
         begin
            Trigger := Route[FCurr^];
-           PBuffer := FBuffer;
            UseEscape := False;
-           Exit;
-        end;
-         UseEscape := True;
-         PBuffer := FEscapeBuff;
+        end
+        else
+           UseEscape := True;
      end
      else
      begin
        Trigger := Route[FCurr^];
        UseEscape := False;
      end;
-  end;
-begin
-  CreateLexeme;
-  UseEscape := False;
-  UseEscapeEnd := False;
-  PBuffer := FBuffer;
-  PBuffer.Clear;
 
-  if FEscapeSupport then
-     FEscapeBuff.Clear;
+     if Trigger = Nil then Exit;
 
-  Route := FFirstRoute;
-  while Assigned(Route) do
-  begin
+     CTyp := Trigger.ClassType;
 
-     GetRoute;
-
-     if not Assigned(Trigger) then
-        Exit;
-
-     if Trigger is TErrorTrigger then
+     if CTyp = TErrorTrigger then
         if FCurr^ = #0 then
            Break
         else
@@ -1157,13 +1065,16 @@ begin
            else
               raise TJSONSyntaxError.Create( TErrorTrigger(Trigger).Message, FCurrPos);
 
-     if Trigger is TUseRouteTrigger then
-        PBuffer.Add(FCurr^);
+     if CTyp = TUseRouteTrigger then
+        if UseEscape then
+           FEscapeBuff.Add(FCurr)
+        else
+           FBuffer.Add(FCurr);
 
-     if (ttBuffer in Trigger.TriggerProcs) and (FLexem.Pos.Col = 0) then
+     if Trigger.BF and (FLexem.Pos.Col = 0) then
         FLexem.Pos := FCurrPos;
 
-     if not (ttBack in Trigger.TriggerProcs) then
+     if not Trigger.BK then
      begin
         Inc(FCurr);
         if FCurr^ = #10 then
@@ -1176,13 +1087,59 @@ begin
      end;
 
      if Trigger.ParseProcs <> ppNil then
-        ParseProc;
+     begin
+        case Trigger.ParseProcs of
+            ppInteger: begin
+               FLexem.Int := FBuffer.AsInt64;
+               FLexem.LType := ltIValue;
+            end;
+            ppDouble:begin
+               FLexem.Dbl := FBuffer.AsDouble;
+               FLexem.LType := ltDValue;
+            end;
+            ppString:begin
+               FLexem.LType := ltSValue;
+            end;
 
-     if (ttEnd in Trigger.TriggerProcs) or UseEscapeEnd then
+            ppName: begin
+               FLexem.Str := FBuffer.AsString;
+               FLexem.LType := FBuffer.AsType;
+            end;
+
+            ppEscapeUChar: begin
+               if FEscapeBuff.Length = 4 then
+               begin
+                  FBuffer.Add( PWideChar(Chr(FEscapeBuff.AsHInt)) );
+                  FEscapeBuff.Clear;
+                  UseEscapeEnd := True;
+               end;
+            end;
+
+            ppEscape: begin
+               case FEscapeBuff.Buff[0] of
+                 'b' : FBuffer.Add(#8);
+                 't' : FBuffer.Add(#9);
+                 'n' : FBuffer.Add(#10);
+                 'v' : FBuffer.Add(#11);
+                 'f' : FBuffer.Add(#12);
+                 'r' : FBuffer.Add(#13);
+                 '\' : FBuffer.Add('\');
+                 '"' : FBuffer.Add('"');
+                 '''': FBuffer.Add('''');
+               else
+                 FBuffer.Add(PWideChar(FEscapeBuff.Buff[0]));
+               end;
+               FEscapeBuff.Clear;
+            end;
+          end;
+     end;
+
+     if Trigger.ED or UseEscapeEnd then
      begin
        if not UseEscape then
        begin
          FFirstRoute := Trigger.NextRoute;
+         FLexem.Str := FBuffer.AsString;
          Exit;
        end;
        UseEscape := False;
@@ -1197,6 +1154,7 @@ begin
   end;
   KillLex;
 end;
+
 
 { TJSONBuilder }
 
