@@ -303,7 +303,7 @@ type
     function AsDouble: Double;
     function AsType: TLexemType;
     function AsHInt: Int64;
-    procedure Add(Ch: PWideChar); inline;
+    procedure Add(Ch: WideChar); inline;
     procedure Grow;
     procedure Clear; inline;
   end;
@@ -560,11 +560,11 @@ end;
 
 { TLexBuff }
 
-procedure TLexBuff.Add(Ch: PWideChar);
+procedure TLexBuff.Add(Ch: WideChar);
 begin
   if Capacity = 0 then Exit;
   if (Length >=  Capacity - Length) then Grow;
-  Buff[Length] := Ch^;
+  Buff[Length] := Ch;
   Inc(Length);
   Buff[Length] := #0;
 end;
@@ -1067,9 +1067,9 @@ begin
 
      if CTyp = TUseRouteTrigger then
         if UseEscape then
-           FEscapeBuff.Add(FCurr)
+           FEscapeBuff.Add(FCurr^)
         else
-           FBuffer.Add(FCurr);
+           FBuffer.Add(FCurr^);
 
      if Trigger.BF and (FLexem.Pos.Col = 0) then
         FLexem.Pos := FCurrPos;
@@ -1109,7 +1109,7 @@ begin
             ppEscapeUChar: begin
                if FEscapeBuff.Length = 4 then
                begin
-                  FBuffer.Add( PWideChar(Chr(FEscapeBuff.AsHInt)) );
+                  FBuffer.Add(Chr(FEscapeBuff.AsHInt));
                   FEscapeBuff.Clear;
                   UseEscapeEnd := True;
                end;
@@ -1127,7 +1127,7 @@ begin
                  '"' : FBuffer.Add('"');
                  '''': FBuffer.Add('''');
                else
-                 FBuffer.Add(PWideChar(FEscapeBuff.Buff[0]));
+                 FBuffer.Add(FEscapeBuff.Buff[0]);
                end;
                FEscapeBuff.Clear;
             end;
