@@ -584,7 +584,10 @@ function TBaseJSON<T, Typ>.GetDouble(V: Typ): Double;
 begin
   Result := 0;
   if Member(TValue.From<Typ>(V).AsVariant) then
-    Result := GetValue<TJSONFloat>(V).ValueEx<Double>;
+     if GetType(V) = varInt64 then
+        Result := GetValue<TJSONInteger>(V).ValueEx<Int64>
+     else
+        Result := GetValue<TJSONFloat>(V).ValueEx<Double>;
 end;
 
 function TBaseJSON<T, Typ>.GetInteger(V: Typ): Int64;
