@@ -55,6 +55,29 @@ type
     constructor CreateFmt(const Msg: String; const Args: array of TVarRec; Pos: TPosition);
   end;
 
+  // ## JSONWriter
+  TJSONWriter = class
+  public const
+    IDENT_SIZE = 2;
+  private
+    FData: TStringBuilder;
+    FIdent: Boolean;
+    FIdentOffset: Integer;
+  public
+    constructor Create(const useIdent: Boolean);
+    destructor Destroy; override;
+    procedure Inc;
+    procedure Dec;
+
+    function Append(const Value: string; const CRLF: Boolean = False): TJSONWriter; overload;
+    function Append(const Value: int64; const CRLF: Boolean = False): TJSONWriter; overload;
+    function AppendVal(const Value: string; const CRLF: Boolean = False): TJSONWriter; overload;
+    function AppendVal(const Value: int64; const CRLF: Boolean = False): TJSONWriter; overload;
+    function ToString: string; override;
+
+    property Ident: Boolean read FIdent;
+  end;
+
 
   // ## JSON Symbols
   // ---------------
@@ -64,7 +87,7 @@ type
     procedure SetAsVariant(const Value: Variant);
     function GetDataType: TDataType;
     function GetIsNull: Boolean;
-    procedure AsJSONString(Str: TStringBuilder);
+    procedure AsJSONString(Str: TJSONWriter);
     property IsNull: Boolean read GetIsNull;
     property DataType: TDataType read GetDataType;
     property AsVariant: Variant read GetAsVariant write SetAsVariant;
@@ -78,7 +101,7 @@ type
     function GetDataType: TDataType; virtual;
     function GetIsNull: Boolean; virtual;
   public
-    procedure AsJSONString(Str: TStringBuilder); virtual;
+    procedure AsJSONString(Str: TJSONWriter); virtual;
     property IsNull: Boolean read GetIsNull;
     property DataType: TDataType read GetDataType;
     property AsVariant: Variant read GetAsVariant write SetAsVariant;
@@ -109,14 +132,14 @@ type
   IJSONNull = interface(IJSONValue<Boolean>) end;
   TJSONNull = class(TJSONValue<Boolean>, IJSONNull)
   protected
-    procedure AsJSONString(Str: TStringBuilder); override;
+    procedure AsJSONString(Str: TJSONWriter); override;
     function GetIsNull: Boolean; override;
   end;
 
   IJSONBoolean = interface(IJSONValue<Boolean>)end;
   TJSONBoolean = class(TJSONValue<Boolean>, IJSONBoolean)
   protected
-    procedure AsJSONString(Str: TStringBuilder); override;
+    procedure AsJSONString(Str: TJSONWriter); override;
   public
     property Value;
   end;
@@ -124,7 +147,7 @@ type
   IJSONString = interface(IJSONValue<String>)end;
   TJSONString = class(TJSONValue<String>, IJSONString)
   protected
-    procedure AsJSONString(Str: TStringBuilder); override;
+    procedure AsJSONString(Str: TJSONWriter); override;
   public
     property Value;
   end;
@@ -132,7 +155,7 @@ type
   IJSONInteger = interface(IJSONValue<Int64>)end;
   TJSONInteger = class(TJSONValue<Int64>, IJSONInteger)
   protected
-    procedure AsJSONString(Str: TStringBuilder); override;
+    procedure AsJSONString(Str: TJSONWriter); override;
   public
     property Value;
   end;
@@ -140,7 +163,7 @@ type
   IJSONFloat = interface(IJSONValue<Double>)end;
   TJSONFloat = class(TJSONValue<Double>, IJSONFloat)
   protected
-    procedure AsJSONString(Str: TStringBuilder); override;
+    procedure AsJSONString(Str: TJSONWriter); override;
   public
     property Value;
   end;
@@ -195,7 +218,7 @@ type
     FNull: Boolean;
   protected
     function GetIsNull: Boolean; override;
-    procedure AsJSONString(Str: TStringBuilder); override;
+    procedure AsJSONString(Str: TJSONWriter); override;
   public
     constructor Create;
     destructor Destroy; override;
@@ -218,17 +241,19 @@ type
     procedure Clear;
     function Count: Integer;
     function Get(const I: Integer): IJSONAncestor;
+    procedure SetIndex(const Int: Integer; const Value: IJSONAncestor);
     function GetEnumerator: TJSONEnumerator<IJSONAncestor>;
-    property Index[const Int: Integer]: IJSONAncestor read Get; default;
+    property Index[const Int: Integer]: IJSONAncestor read Get write SetIndex; default;
   end;
 
   TJSONArray = class(TJSONValue<IJSONAncestor>, IJSONArray)
   private
     FList: TList<IJSONAncestor>;
     FNull: Boolean;
+    procedure SetIndex(const Int: Integer; const Value: IJSONAncestor);
   protected
     function GetIsNull: Boolean; override;
-    procedure AsJSONString(Str: TStringBuilder); override;
+    procedure AsJSONString(Str: TJSONWriter); override;
   public
     constructor Create;
     destructor Destroy; override;
@@ -239,7 +264,7 @@ type
     function Count: Integer;
     function Get(const I: Integer): IJSONAncestor;
     function GetEnumerator: TJSONEnumerator<IJSONAncestor>;
-    property Index[const Int: Integer]: IJSONAncestor read Get; default;
+    property Index[const Int: Integer]: IJSONAncestor read Get write SetIndex; default;
   end;
 
 
@@ -521,7 +546,7 @@ var
 
 { TJSONAncestor }
 
-procedure TJSONAncestor.AsJSONString(Str: TStringBuilder);
+procedure TJSONAncestor.AsJSONString(Str: TJSONWriter);
 begin
   Str.Append('');
 end;
@@ -1262,47 +1287,47 @@ end;
 
 { TJSONString }
 
-procedure TJSONString.AsJSONString(Str: TStringBuilder);
+procedure TJSONString.AsJSONString(Str: TJSONWriter);
 begin
   if IsNull then
-     Str.Append( cNull )
+     Str.AppendVal( cNull )
   else
-     Str.Append( '"' +  StrToUTF16(Value) + '"' );
+     Str.AppendVal( '"' +  StrToUTF16(Value) + '"' );
 end;
 
 { TJSONInteger }
 
-procedure TJSONInteger.AsJSONString(Str: TStringBuilder);
+procedure TJSONInteger.AsJSONString(Str: TJSONWriter);
 begin
   if FNull then
-     Str.Append( cNull )
+     Str.AppendVal( cNull )
   else
-     Str.Append( Value );
+     Str.AppendVal( Value );
 end;
 
 
 { TJSONFloat }
 
-procedure TJSONFloat.AsJSONString(Str: TStringBuilder);
+procedure TJSONFloat.AsJSONString(Str: TJSONWriter);
 begin
   if FNull then
-     Str.Append( cNull )
+     Str.AppendVal( cNull )
   else
-     Str.Append( FloatToStr(Value, FloatFormat) );
+     Str.AppendVal( FloatToStr(Value, FloatFormat) );
 end;
 
 { TJSONBoolean }
 
-procedure TJSONBoolean.AsJSONString(Str: TStringBuilder);
+procedure TJSONBoolean.AsJSONString(Str: TJSONWriter);
 begin
-   Str.Append( String(iff( IsNull, cNull, iff( Value, 'true', 'false') )) );
+   Str.AppendVal( String(iff( IsNull, cNull, iff( Value, 'true', 'false') )) );
 end;
 
 { TJSONNull }
 
-procedure TJSONNull.AsJSONString(Str: TStringBuilder);
+procedure TJSONNull.AsJSONString(Str: TJSONWriter);
 begin
-  Str.Append( cNull );
+  Str.AppendVal( cNull );
 end;
 
 function TJSONNull.GetIsNull: Boolean;
@@ -1330,25 +1355,31 @@ begin
   AddPair( TJSONPair.Create(Name, Value) );
 end;
 
-procedure TJSONObject.AsJSONString(Str: TStringBuilder);
+procedure TJSONObject.AsJSONString(Str: TJSONWriter);
 var
   P: IJSONPair;
   I,L: Integer;
 begin
   if FNull then
-     Str.Append( cNull )
+     Str.AppendVal( cNull )
   else
   begin
-    Str.Append('{');
+    Str.Append('{', True);
+    Str.Inc;
     L := Count-1;
     for I := 0 to L do
     begin
        P := FPairList[I];
        Str.Append('"' + StrToUTF16(P.Name) + '":');
+       if Str.Ident and (P.JSONValue.DataType in [dtObject, dtArray]) then
+          Str.Append('', True);
        P.JSONValue.AsJSONString(Str);
        if I < L then
-          Str.Append(',');
+          Str.AppendVal(',', Str.Ident);
     end;
+    Str.Dec;
+    if Str.Ident then
+       Str.Append(#$D#$A);
     Str.Append('}');
   end;
 end;
@@ -1484,22 +1515,26 @@ begin
      FList.Add(Val);
 end;
 
-procedure TJSONArray.AsJSONString(Str: TStringBuilder);
+procedure TJSONArray.AsJSONString(Str: TJSONWriter);
 var
   I,L: Integer;
 begin
   if FNull then
-     Str.Append( cNull )
+     Str.AppendVal( cNull )
   else
   begin
-    Str.Append('[');
+    Str.Append('[', True);
+    Str.Inc;
     L := Count - 1;
     for I := 0 to L do
     begin
        FList[I].AsJSONString(Str);
        if I < L then
-          Str.Append(',');
+          Str.AppendVal(',', Str.Ident);
     end;
+    Str.Dec;
+    if Str.Ident then
+       Str.Append(#$D#$A);
     Str.Append(']');
   end;
 end;
@@ -1552,6 +1587,13 @@ end;
 procedure TJSONArray.Remove(Index: Integer);
 begin
   FList.Delete(Index);
+end;
+
+procedure TJSONArray.SetIndex(const Int: Integer; const Value: IJSONAncestor);
+begin
+  if (FList.Count = 0) or (Flist.Count <= Int) then
+      Exit;
+  FList[Int] := Value;
 end;
 
 { TJSONValue<T> }
@@ -1786,6 +1828,71 @@ begin
   Result := Index < List.Count - 1;
   if Result then
     Inc(Index);
+end;
+
+{ TJSONWriter }
+
+function TJSONWriter.Append(const Value: string; const CRLF: Boolean = False): TJSONWriter;
+begin
+  if FIdent then
+  begin
+     FData.Append(' ', FIdentOffset);
+     if CRLF then
+        FData.AppendLine(Value)
+     else
+        FData.Append(Value)
+  end
+  else
+     FData.Append(Value);
+  Result := Self;
+end;
+
+function TJSONWriter.Append(const Value: int64; const CRLF: Boolean): TJSONWriter;
+begin
+  Result := Append(IntToStr(Value), CRLF);
+end;
+
+function TJSONWriter.AppendVal(const Value: string; const CRLF: Boolean): TJSONWriter;
+begin
+  if CRLF then
+     FData.AppendLine(Value)
+  else
+     FData.Append(Value);
+  Result := Self;
+end;
+
+function TJSONWriter.AppendVal(const Value: int64; const CRLF: Boolean): TJSONWriter;
+begin
+  Result := Append(IntToStr(Value), CRLF);
+end;
+
+constructor TJSONWriter.Create(const useIdent: Boolean);
+begin
+  inherited Create;
+  FData := TStringBuilder.Create;
+  FIdent := useIdent;
+  FIdentOffset := 0;
+end;
+
+procedure TJSONWriter.Dec;
+begin
+  System.Dec(FIdentOffset, IDENT_SIZE);
+end;
+
+destructor TJSONWriter.Destroy;
+begin
+  FData.Free;
+  inherited;
+end;
+
+procedure TJSONWriter.Inc;
+begin
+  System.Inc(FIdentOffset, IDENT_SIZE);
+end;
+
+function TJSONWriter.ToString: string;
+begin
+  Result := FData.ToString;
 end;
 
 initialization
