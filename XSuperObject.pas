@@ -350,7 +350,7 @@ type
 
     class function  ObjectConstructorParamCount(Instance: TClass): Integer;
     class function  ObjectConstructor(Instance: TClass): TObject;
-    class function  CheckObject(Data: Pointer; Member: TRttiMember; var Obj: TObject): Boolean;
+    class function  CheckObject<Typ>(Data: Pointer; Member: TRttiMember; MIdx: Typ; var Obj: TObject): Boolean;
   end;
 
   TSuperObjectHelper = class helper for TObject
@@ -1107,36 +1107,34 @@ begin
   end;
 end;
 
-class function TSerializeParse.CheckObject(Data: Pointer;
-  Member: TRttiMember; var Obj: TObject): Boolean;
+class function TSerializeParse.CheckObject<Typ>(Data: Pointer;
+  Member: TRttiMember; MIdx: Typ; var Obj: TObject): Boolean;
+var
+  rtype: TRttiType;
+  rawData: Pointer;
 begin
   Obj := Nil;
-  if (Member is TRttiProperty) then
+  rawData := GetArrayRawData(Member);
+  rtype := GetMemberType(Member);
+  if rawData <> nil then
   begin
-    Obj := TRttiProperty(Member).GetValue(Data).AsObject;
-    if (Obj = Nil) then
-       if (ObjectConstructorParamCount( TRttiProperty(Member).PropertyType.AsInstance.MetaclassType ) <> 0 ) then
-          Exit(False)
-       else
-       begin
-          Obj := ObjectConstructor(TRttiProperty(Member).PropertyType.AsInstance.MetaclassType);
-          TRttiProperty(Member).SetValue(Data, Obj);
-       end;
+    Obj := GetValue<Typ>(rawData, Member, MIdx).AsObject;
+    if (Obj = Nil) and (ObjectConstructorParamCount(rtype.AsInstance.MetaclassType) = 0 ) then
+    begin
+      Obj := ObjectConstructor(rtype.AsInstance.MetaclassType);
+      SetValue<Typ>(rawData, Member, MIdx, TValue.From(obj));
+    end;
   end
   else
-  if (Member is TRttiField) then
   begin
-    Obj := TRttiField(Member).GetValue(Data).AsObject;
-    if (Obj = Nil) then
-       if (ObjectConstructorParamCount( TRttiField(Member).FieldType.AsInstance.MetaclassType ) <> 0 ) then
-          Exit(False)
-       else
-       begin
-          Obj := ObjectConstructor(TRttiProperty(Member).PropertyType.AsInstance.MetaclassType);
-          TRttiField(Member).SetValue(Data, Obj);
-       end;
+    Obj := GetValue<String>(Data, Member, '').AsObject;
+    if (Obj = Nil) and (ObjectConstructorParamCount(rtype.AsInstance.MetaclassType) = 0 ) then
+    begin
+      Obj := ObjectConstructor(rtype.AsInstance.MetaclassType);
+      SetValue<String>(Data, Member, '', Obj);
+    end;
   end;
-  Result := True;
+  Result := Obj <> nil;
 end;
 
 class procedure TSerializeParse.ClearArrayRawData(Member: TRttiMember);
@@ -1384,7 +1382,7 @@ begin
 
     tkClass:
        begin
-          if CheckObject(Data, MemberValue, Obj) then
+          if CheckObject<Typ>(Data, MemberValue, Member, Obj) then
              WriteObject(Obj, IJSonData.O[Member]);
        end;
 
