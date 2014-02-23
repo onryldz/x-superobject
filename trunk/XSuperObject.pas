@@ -1116,13 +1116,13 @@ begin
   Obj := Nil;
   rawData := GetArrayRawData(Member);
   rtype := GetMemberType(Member);
-  if rawData <> nil then
+   if rawData <> nil then
   begin
     Obj := GetValue<Typ>(rawData, Member, MIdx).AsObject;
     if (Obj = Nil) and (ObjectConstructorParamCount(rtype.AsInstance.MetaclassType) = 0 ) then
     begin
       Obj := ObjectConstructor(rtype.AsInstance.MetaclassType);
-      SetValue<Typ>(rawData, Member, MIdx, TValue.From(obj));
+      SetValue<Typ>(rawData, Member, MIdx, TValue.From<TObject>(obj));
     end;
   end
   else
@@ -1131,7 +1131,7 @@ begin
     if (Obj = Nil) and (ObjectConstructorParamCount(rtype.AsInstance.MetaclassType) = 0 ) then
     begin
       Obj := ObjectConstructor(rtype.AsInstance.MetaclassType);
-      SetValue<String>(Data, Member, '', Obj);
+      SetValue<String>(Data, Member, '', TValue.From<TObject>(Obj));
     end;
   end;
   Result := Obj <> nil;
