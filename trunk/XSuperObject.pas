@@ -1112,6 +1112,7 @@ class function TSerializeParse.CheckObject<Typ>(Data: Pointer;
 var
   rtype: TRttiType;
   rawData: Pointer;
+  Val: TValue;
 begin
   Obj := Nil;
   rawData := GetArrayRawData(Member);
@@ -1122,7 +1123,8 @@ begin
     if (Obj = Nil) and (ObjectConstructorParamCount(rtype.AsInstance.MetaclassType) = 0 ) then
     begin
       Obj := ObjectConstructor(rtype.AsInstance.MetaclassType);
-      SetValue<Typ>(rawData, Member, MIdx, TValue.From<TObject>(obj));
+      TValue.Make(@Obj, rtype.Handle , Val);
+      SetValue<Typ>(rawData, Member, MIdx, Val);
     end;
   end
   else
@@ -1131,7 +1133,8 @@ begin
     if (Obj = Nil) and (ObjectConstructorParamCount(rtype.AsInstance.MetaclassType) = 0 ) then
     begin
       Obj := ObjectConstructor(rtype.AsInstance.MetaclassType);
-      SetValue<String>(Data, Member, '', TValue.From<TObject>(Obj));
+      TValue.Make(@Obj, rtype.Handle , Val);
+      SetValue<String>(Data, Member, '', Val);
     end;
   end;
   Result := Obj <> nil;
