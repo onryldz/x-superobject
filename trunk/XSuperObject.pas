@@ -76,6 +76,8 @@ type
     property Ancestor[V: Typ]: IJSONAncestor read GetAncestor;
     function Contains(Key: Typ): Boolean;
     function GetType(Key: Typ): TVarType;
+    procedure SaveTo(Stream: TStream; const Ident: Boolean = false); overload;
+    procedure SaveTo(AFile: String; const Ident: Boolean = false); overload;
     function AsJSON(const Ident: Boolean = False): String;
     property Self: T read GetSelf;
   end;
@@ -129,10 +131,11 @@ type
     property Ancestor[V: Typ]: IJSONAncestor read GetAncestor;
     function Contains(Key: Typ): Boolean;
     function GetType(Key: Typ): TVarType;
+    procedure SaveTo(Stream: TStream; const Ident: Boolean = false); overload; virtual; abstract;
+    procedure SaveTo(AFile: String; const Ident: Boolean = false); overload; virtual; abstract;
     function AsJSON(const Ident: Boolean = False): String; inline;
     property Self: T read GetSelf;
   end;
-
 
 
   ICast = interface
@@ -211,8 +214,6 @@ type
     destructor Destroy; override;
   end;
 
-
-
   TSuperEnumerator<T> = record
     Index : Integer;
     List : TJSONEnumerator<T>;
@@ -233,9 +234,6 @@ type
 
     procedure SetData(V: String; Data: Variant); overload;
     procedure SetData(V: String; Data: Variant; AFormatSettings: TFormatSettings); overload;
-
-    procedure SaveTo(Stream: TStream); overload;
-    procedure SaveTo(AFile: String); overload;
 
     property Expression[const Code: String]: ISuperExpression read GetExpr; default;
     property Count: Integer read GetCount;
@@ -268,8 +266,8 @@ type
     class function ParseStream(Stream: TStream): TSuperObject;
     class function ParseFile(FileName: String): TSuperObject;
 
-    procedure SaveTo(Stream: TStream); overload;
-    procedure SaveTo(AFile: String); overload;
+    procedure SaveTo(Stream: TStream; const Ident: Boolean = false); overload; override;
+    procedure SaveTo(AFile: String; const Ident: Boolean = false); overload; override;
 
 
     property Expression[const Code: String]: ISuperExpression read GetExpr; default;
@@ -307,6 +305,8 @@ type
     procedure Clear;
     property Length: Integer read GetLength;
     function GetEnumerator: TSuperEnumerator<IJSONAncestor>;
+    procedure SaveTo(Stream: TStream; const Ident: Boolean = false); overload; override;
+    procedure SaveTo(AFile: String; const Ident: Boolean = false); overload; override;
   end;
 
   TSuperProperty = class(TRttiProperty)
@@ -846,11 +846,11 @@ begin
   end;
 end;
 
-procedure TSuperObject.SaveTo(Stream: TStream);
+procedure TSuperObject.SaveTo(Stream: TStream; const Ident: Boolean);
 var
   S: TStringStream;
 begin
-  S := TStringStream.Create( ToString );
+  S := TStringStream.Create( AsJSON(Ident) );
   try
      S.SaveToStream(S);
   finally
@@ -858,11 +858,11 @@ begin
   end;
 end;
 
-procedure TSuperObject.SaveTo(AFile: String);
+procedure TSuperObject.SaveTo(AFile: String; const Ident: Boolean);
 var
   S: TStringStream;
 begin
-  S := TStringStream.Create( AsJSON );
+  S := TStringStream.Create( AsJSON(Ident) );
   try
      S.SaveToFile(AFile);
   finally
@@ -992,6 +992,30 @@ end;
 function TSuperArray.GetLength: Integer;
 begin
   Result := TJSONArray(FJSONObj).Count;
+end;
+
+procedure TSuperArray.SaveTo(Stream: TStream; const Ident: Boolean);
+var
+  S: TStringStream;
+begin
+  S := TStringStream.Create( AsJSON(Ident) );
+  try
+     S.SaveToStream(S);
+  finally
+     S.Free;
+  end;
+end;
+
+procedure TSuperArray.SaveTo(AFile: String; const Ident: Boolean);
+var
+  S: TStringStream;
+begin
+  S := TStringStream.Create( AsJSON(Ident) );
+  try
+     S.SaveToFile(AFile);
+  finally
+     S.Free;
+  end;
 end;
 
 procedure TSuperArray.SetNull(V: Integer; const aValue: TMemberStatus);
