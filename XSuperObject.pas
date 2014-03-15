@@ -374,9 +374,7 @@ type
   function SO(JSON: String = '{}'): ISuperObject;
   function SA(JSON: String = '[]'): ISuperArray;
 
-implementation
-
- // ** Zero Based Strings Definations...
+  // ** Zero Based Strings Definations...
  {$UNDEF XE2UP}
  {$IFDEF DCC}
    {$IF CompilerVersion >= 24}
@@ -389,6 +387,8 @@ implementation
  {$ELSE}
    const CharIndex = 1;
  {$ENDIF}
+ 
+implementation
 
 
 function SO(JSON: String): ISuperObject;
