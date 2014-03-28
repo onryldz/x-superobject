@@ -46,6 +46,7 @@ type
   end;
 
   IBaseJSON<T, Typ> = interface(IBase)
+  ['{EBD49266-BEF2-4B79-9BAF-329F725E0568}']
     function GetBoolean(V: Typ): Boolean;
     function GetInteger(V: Typ): Int64;
     function GetString(V: Typ): String;
@@ -223,6 +224,7 @@ type
   end;
 
   ISuperObject = interface(IBaseJSON<IJSONObject, String>)
+  ['{B7E271F3-205B-4172-8532-BE03F2A6EDE7}']
     procedure First;
     procedure Next;
     function GetEoF: Boolean;
@@ -241,6 +243,7 @@ type
     property CurrentKey: String read GetCurrentKey;
     property CurrentValue: IJSONAncestor read GetCurrentValue;
     property Offset: Integer read GetOffset;
+    function Clone: ISuperObject;
     function GetEnumerator: TSuperEnumerator<IJSONPair>;
     function T: TSuperObject;
   end;
@@ -279,9 +282,11 @@ type
     function GetEnumerator: TSuperEnumerator<IJSONPair>;
     function AsType<T>: T;
     function T: TSuperObject; inline;
+    function Clone: ISuperObject;
   end;
 
   ISuperArray = interface(IBaseJSON<IJSONArray, Integer>)
+  ['{41A2D578-CFAB-4924-8F15-0D0227F35412}']
     function GetLength: Integer;
     property Length: Integer read GetLength;
     procedure Add(Value: Variant; DateFormat: TFormatSettings); overload;
@@ -289,6 +294,7 @@ type
     procedure Add(Value: IJSONAncestor); overload;
     procedure Delete(Index: Integer);
     procedure Clear;
+    function Clone: ISuperArray;
     function GetEnumerator: TSuperEnumerator<IJSONAncestor>;
   end;
 
@@ -307,6 +313,7 @@ type
     function GetEnumerator: TSuperEnumerator<IJSONAncestor>;
     procedure SaveTo(Stream: TStream; const Ident: Boolean = false); overload; override;
     procedure SaveTo(AFile: String; const Ident: Boolean = false); overload; override;
+    function Clone: ISuperArray;
   end;
 
   TSuperProperty = class(TRttiProperty)
@@ -769,6 +776,11 @@ begin
   end;
 end;
 
+function TSuperObject.Clone: ISuperObject;
+begin
+  Result := SO(AsJSON);
+end;
+
 procedure TSuperObject.First;
 begin
   FOffset := 0;
@@ -937,27 +949,27 @@ procedure TSuperArray.Add(Value: Variant; DateFormat: TFormatSettings);
 begin
   if VarIsNull(Value) then
   begin
-    FJSONObj.Add(TJSONNull.Create(True));
-    exit;
+    TJSONArray(FJSONObj).Add(TJSONNull.Create(True));
+    Exit;
   end;
 
   case VarType(Value) of
     varDate :
-       FJSONObj.Add(TJSONString.Create(DateTimeToStr(TDateTime(Value), DateFormat)));
+       TJSONArray(FJSONObj).Add(TJSONString.Create(DateTimeToStr(TDateTime(Value), DateFormat)));
     varBoolean:
-       FJSONObj.Add(TJSONBoolean.Create(Value));
+       TJSONArray(FJSONObj).Add(TJSONBoolean.Create(Value));
 
     else
       with TValue.FromVariant(Value) do
           case Kind of
              tkInteger, tkInt64:
-                FJSONObj.Add(TJSONInteger.Create(Int64(Value)));
+                TJSONArray(FJSONObj).Add(TJSONInteger.Create(Int64(Value)));
 
              tkFloat:
-                FJSONObj.Add(TJSONFloat.Create(Double(Value)));
+                TJSONArray(FJSONObj).Add(TJSONFloat.Create(Double(Value)));
 
              tkString, tkWChar, tkLString, tkWString, tkUString, tkChar:
-                FJSONObj.Add(TJSONString.Create(String(Value)));
+                TJSONArray(FJSONObj).Add(TJSONString.Create(Value));
           end;
   end;
 
@@ -976,6 +988,11 @@ end;
 procedure TSuperArray.Clear;
 begin
   FJSONObj.Clear;
+end;
+
+function TSuperArray.Clone: ISuperArray;
+begin
+  Result := SA(AsJSON);
 end;
 
 procedure TSuperArray.Delete(Index: Integer);
@@ -1306,7 +1323,13 @@ begin
     tkRecord:
        ReadRecord(MemberValue.TypeInfo, MemberValue.GetReferenceToRawData, IJSonData.O[Member]);
 
-    tkClassRef: ;
+    tkInterface:
+      if (TypeInfo(ISuperObject) = MemberValue.TypeInfo) then
+         IJsonData.O[Member] := MemberValue.AsType<ISuperObject>.Clone
+      else
+      if (TypeInfo(ISuperArray) = MemberValue.TypeInfo) then
+         IJsonData.A[Member] := MemberValue.AsType<ISuperArray>.Clone;
+
   end;
 end;
 
@@ -1426,30 +1449,36 @@ begin
     tkArray: raise SOException.Create('There is no support for static array.');
 
     tkDynArray:
-       begin
-         SetArrayRawData(MemberValue, Data);
-         J := IJSonData.A[Member].Length;
-         SubVal := GetValue<Typ>(Data, MemberValue, Member);
-         DynArraySetLength(PPointer(SubVal.GetReferenceToRawData)^, SubVal.TypeInfo, 1, @J);
-         SetValue<String>(Data, MemberValue,'', SubVal );
-         for I := 0 to J-1 do
-             WriteMember<IJSONArray, Integer>
-                        (SubVal.GetReferenceToRawArrayElement(I),
-                         I,
-                         GetMemberType(MemberValue).TypeKind,
-                         MemberValue,
-                         IJsonData.A[Member]);
-        ClearArrayRawData(MemberValue);
-       end;
+      begin
+        SetArrayRawData(MemberValue, Data);
+        J := IJSonData.A[Member].Length;
+        SubVal := GetValue<Typ>(Data, MemberValue, Member);
+        DynArraySetLength(PPointer(SubVal.GetReferenceToRawData)^, SubVal.TypeInfo, 1, @J);
+        SetValue<String>(Data, MemberValue,'', SubVal );
+        for I := 0 to J-1 do
+            WriteMember<IJSONArray, Integer>
+                       (SubVal.GetReferenceToRawArrayElement(I),
+                        I,
+                        GetMemberType(MemberValue).TypeKind,
+                        MemberValue,
+                        IJsonData.A[Member]);
+       ClearArrayRawData(MemberValue);
+      end;
 
     tkRecord:
-    begin
-       P := IValueData(TValueData( GetValue<Typ>(Data, MemberValue, Member) ).FValueData).GetReferenceToRawData;
-       WriteRecord(GetMemberTypeInfo(MemberValue), P, IJSonData.O[Member]);
-       TValue.Make(P, GetMemberTypeInfo(MemberValue), SubVal);
-       SetValue<Typ>(Data, MemberValue, Member, SubVal );
-    end;
+      begin
+         P := IValueData(TValueData( GetValue<Typ>(Data, MemberValue, Member) ).FValueData).GetReferenceToRawData;
+         WriteRecord(GetMemberTypeInfo(MemberValue), P, IJSonData.O[Member]);
+         TValue.Make(P, GetMemberTypeInfo(MemberValue), SubVal);
+         SetValue<Typ>(Data, MemberValue, Member, SubVal );
+      end;
 
+    tkInterface:
+      if (TypeInfo(ISuperObject) = GetMemberTypeInfo(MemberValue)) And (IJsonData.Ancestor[Member].DataType = dtObject) then
+          SetValue<Typ>(Data, MemberValue, Member, TValue.From<ISuperObject>(IJsonData.O[Member].Clone))
+      else
+      if (TypeInfo(ISuperArray) = GetMemberTypeInfo(MemberValue)) And (IJsonData.Ancestor[Member].DataType = dtArray) then
+          SetValue<Typ>(Data, MemberValue, Member, TValue.From<ISuperArray>(IJsonData.A[Member].Clone));
   end;
 end;
 
@@ -1523,7 +1552,7 @@ end;
 
 class function TBaseSuperRecord<T>.AsJSON(Rec: T): String;
 begin
-  Result := AsJSONOBject(Rec).AsJSON;
+  Result := AsJSONObject(Rec).AsJSON;
 end;
 
 class function TBaseSuperRecord<T>.FromJSON(JSON: String): T;
