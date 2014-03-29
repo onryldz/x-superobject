@@ -83,6 +83,7 @@ type
   // ---------------
 
   IJSONAncestor = interface
+  ['{FFB71762-50A1-4D27-9F59-56F6208421C7}']
     function GetAsVariant: Variant;
     procedure SetAsVariant(const Value: Variant);
     function GetDataType: TDataType;
@@ -108,6 +109,7 @@ type
   end;
 
   IJSONValue<T> = interface(IJSONAncestor)
+  ['{0B1ED53C-EF62-4BFA-9E78-9DD9088D96C5}']
     function GetData: T;
     procedure SetData(const Value: T);
     procedure SetNull;
@@ -129,14 +131,14 @@ type
     procedure SetNull;
   end;
 
-  IJSONNull = interface(IJSONValue<Boolean>) end;
+  IJSONNull = interface(IJSONValue<Boolean>)['{C19F5715-B832-46D8-8668-1A9DC31393D7}']end;
   TJSONNull = class(TJSONValue<Boolean>, IJSONNull)
   protected
     procedure AsJSONString(Str: TJSONWriter); override;
     function GetIsNull: Boolean; override;
   end;
 
-  IJSONBoolean = interface(IJSONValue<Boolean>)end;
+  IJSONBoolean = interface(IJSONValue<Boolean>)['{CCC8D8C5-081D-4DCF-93DB-CC0696458A12}']end;
   TJSONBoolean = class(TJSONValue<Boolean>, IJSONBoolean)
   protected
     procedure AsJSONString(Str: TJSONWriter); override;
@@ -144,7 +146,7 @@ type
     property Value;
   end;
 
-  IJSONString = interface(IJSONValue<String>)end;
+  IJSONString = interface(IJSONValue<String>)['{C507BB41-3674-4F47-8D6B-5605258F6A2F}']end;
   TJSONString = class(TJSONValue<String>, IJSONString)
   protected
     procedure AsJSONString(Str: TJSONWriter); override;
@@ -152,7 +154,7 @@ type
     property Value;
   end;
 
-  IJSONInteger = interface(IJSONValue<Int64>)end;
+  IJSONInteger = interface(IJSONValue<Int64>)['{E9D84348-9634-40F5-8A1F-FF006F45FC6D}']end;
   TJSONInteger = class(TJSONValue<Int64>, IJSONInteger)
   protected
     procedure AsJSONString(Str: TJSONWriter); override;
@@ -160,7 +162,7 @@ type
     property Value;
   end;
 
-  IJSONFloat = interface(IJSONValue<Double>)end;
+  IJSONFloat = interface(IJSONValue<Double>)['{29D840FB-191B-4304-9518-C2937B3AE6B0}']end;
   TJSONFloat = class(TJSONValue<Double>, IJSONFloat)
   protected
     procedure AsJSONString(Str: TJSONWriter); override;
@@ -169,6 +171,7 @@ type
   end;
 
   IJSONPair = interface
+  ['{D328943F-5ED1-4B35-8332-573156565C96}']
     function GetName: String;
     function GetValue: IJSONAncestor;
     procedure SetName(const Value: String);
@@ -201,6 +204,7 @@ type
   end;
 
   IJSONObject = Interface(IJSONValue<IJSONPair>)
+  ['{2A9244EC-F202-4CC1-9F89-7DA12437F7ED}']
     function Count: Integer;
     function Get(const Name: String): IJSONPair; overload;
     function Get(const Index: Integer): IJSONPair; overload;
@@ -235,6 +239,7 @@ type
   end;
 
   IJSONArray = interface(IJSONValue<IJSONAncestor>)
+  ['{C63B4323-6D7E-4151-BA1B-4C55CDE28FDB}']
     procedure Add(Val: IJSONAncestor);
     procedure Remove(Val: IJSONAncestor); overload;
     procedure Remove(Index: Integer); overload;

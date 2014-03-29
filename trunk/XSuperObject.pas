@@ -40,9 +40,13 @@ type
   TMemberStatus = (jUnAssigned, jNull, jAssigned);
 
   IBase = interface
+    function AsObject: ISuperObject;
+    function AsArray: ISuperArray;
   end;
 
   TBase = class(TInterfacedObject, IBase)
+    function AsObject: ISuperObject; virtual; 
+    function AsArray: ISuperArray; virtual;
   end;
 
   IBaseJSON<T, Typ> = interface(IBase)
@@ -91,6 +95,7 @@ type
   TBaseJSON<T, Typ> = class(TBase, IBaseJSON<T, Typ>)
   protected
     FJSONObj: T;
+    FCasted: IJSONAncestor;
     FInterface: IInterface;
     function ContainsEx(Key: Typ; Value: IJSONAncestor): Boolean;
     function  DefaultValueClass<TT: Class>(const Value: TValue): TT;
@@ -283,6 +288,8 @@ type
     function AsType<T>: T;
     function T: TSuperObject; inline;
     function Clone: ISuperObject;
+    function AsObject: ISuperObject; override;
+    function AsArray: ISuperArray; override;
   end;
 
   ISuperArray = interface(IBaseJSON<IJSONArray, Integer>)
@@ -304,9 +311,11 @@ type
   protected
     procedure SetNull(V: Integer; const aValue: TMemberStatus); override;
   public
+    procedure Add(Value: IJSONAncestor); overload;
+    procedure Add(Value: ISuperObject); overload;
+    procedure Add(Value: ISuperArray); overload;
     procedure Add(Value: Variant; DateFormat: TFormatSettings); overload;
     procedure Add(Value: Variant); overload;
-    procedure Add(Value: IJSONAncestor); overload;
     procedure Delete(Index: Integer);
     procedure Clear;
     property Length: Integer read GetLength;
@@ -314,6 +323,7 @@ type
     procedure SaveTo(Stream: TStream; const Ident: Boolean = false); overload; override;
     procedure SaveTo(AFile: String; const Ident: Boolean = false); overload; override;
     function Clone: ISuperArray;
+    function AsArray: ISuperArray; override;
   end;
 
   TSuperProperty = class(TRttiProperty)
@@ -412,15 +422,14 @@ end;
 
 constructor TBaseJSON<T, Typ>.Create(JSON: String);
 var
-  M: TValue;
   JVal: IJSONAncestor;
 begin
-  if (Self.InheritsFrom(TSuperArray)) and (Trim(JSON) = '{}') then
-     JSON := '[]';
+  if (Self.InheritsFrom(TSuperArray)) and (Trim(JSON) = '{}') then JSON := '[]';
   JVal := TJSONObject.ParseJSONValue(JSON);
-  TValue.Make(@JVal, TypeInfo(T), M);
-  FJSONObj := M.AsType<T>;
-  FInterface := TVAlue.From<T>(FJSONObj).AsInterface;
+  if JVal.QueryInterface(PTypeInfo(TypeInfo(T)).TypeData.Guid, FJSONObj) = S_OK then
+     FInterface := TValue.From<T>(FJSONObj).AsInterface
+  else
+     FCasted := JVal
 end;
 
 function TBaseJSON<T, Typ>.GetValue<C>(const Name: Typ): C;
@@ -513,6 +522,7 @@ end;
 constructor TBaseJSON<T, Typ>.Create(JSON: T);
 begin
   FJSONObj := JSON;
+  FCasted := nil;
   FInterface := TValue.From<T>(JSON).AsInterface;
 end;
 
@@ -751,6 +761,19 @@ end;
 
 { TSuperObject }
 
+function TSuperObject.AsArray: ISuperArray;
+begin
+  if not Assigned(FCasted) or not (FCasted is TJSONArray) then 
+     Exit(Nil)
+  else
+     Result := TSuperArray.Create(IJSONArray(FCasted));
+end;
+
+function TSuperObject.AsObject: ISuperObject;
+begin
+  Result := Self;
+end;
+
 function TSuperObject.AsType<T>: T;
 var
   Ctx: TRttiContext;
@@ -976,13 +999,32 @@ begin
 end;
 
 procedure TSuperArray.Add(Value: Variant);
+var 
+  P: Pointer;
 begin
+  if VarType(Value) = varUnknown  then with IUnknown(Value) do
+  begin
+     if QueryInterface(ISuperObject, P) = S_OK then
+        Add(ISuperObject(P))
+     else
+     if QueryInterface(ISuperArray, P) = S_OK then
+        Add(ISuperArray(P))
+     else
+     if QueryInterface(IJSONAncestor, P) = S_OK then
+        Add(IJSONAncestor(P));
+  end
+  else
   Add(Value, FormatSettings);
+end;
+
+function TSuperArray.AsArray: ISuperArray;
+begin
+  Result := Self;
 end;
 
 procedure TSuperArray.Add(Value: IJSONAncestor);
 begin
-  FJSONObj.Add(Value);
+  TJSONArray(FJSONObj).Add(Value);
 end;
 
 procedure TSuperArray.Clear;
@@ -1055,6 +1097,16 @@ begin
        else
           Member<TJSONNull>(IntToStr(V), TValue.From<Boolean>(True));
   end;
+end;
+
+procedure TSuperArray.Add(Value: ISuperObject);
+begin
+  Add(Value.Self);
+end;
+
+procedure TSuperArray.Add(Value: ISuperArray);
+begin
+  Add(Value.Self);
 end;
 
 { TSuperObjectHelper }
@@ -1820,6 +1872,18 @@ begin
   Result := Index < List.List.Count - 1;
   if Result then
     Inc(Index);
+end;
+
+{ TBase }
+
+function TBase.AsArray: ISuperArray;
+begin
+  Result := Nil;
+end;
+
+function TBase.AsObject: ISuperObject;
+begin
+  Result := Nil;
 end;
 
 end.
