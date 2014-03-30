@@ -504,7 +504,10 @@ var
 begin
   try
     SBuild := TJSONWriter.Create(Ident);
-    TJSONAncestor(FInterface).AsJSONString(SBuild);
+    if Assigned(FCasted) then
+       FCasted.AsJSONString(SBuild)
+    else
+       TJSONAncestor(FInterface).AsJSONString(SBuild);
     Result := SBuild.ToString;
   finally
     SBuild.Free;
