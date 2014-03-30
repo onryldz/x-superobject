@@ -69,6 +69,7 @@ type
     function GetAncestor(V: Typ): IJSONAncestor;
     function GetNull(V: Typ): TMemberStatus;
     procedure SetNull(V: Typ; const Value: TMemberStatus);
+    function GetDataType: TDataType;
 
     property Null[V: Typ]: TMemberStatus read GetNull write SetNull;
     property S[V: Typ]: String read GetString write SetString;
@@ -85,6 +86,7 @@ type
     procedure SaveTo(AFile: String; const Ident: Boolean = false); overload;
     function AsJSON(const Ident: Boolean = False): String;
     property Self: T read GetSelf;
+    property DataType: TDataType read GetDataType;
   end;
 
   TJSONValueHelper = class helper for TJSONAncestor
@@ -106,6 +108,7 @@ type
     function  GetData(Key: Typ): IJSONAncestor;
     function  GetVariant(V: Typ): Variant;
     procedure SetVariant(V: Typ; const Value: Variant);
+    function  GetDataType: TDataType;
   protected
     function GetObject(V: Typ): ISuperObject; virtual;
     function GetArray(V: Typ): ISuperArray; virtual;
@@ -141,6 +144,7 @@ type
     procedure SaveTo(AFile: String; const Ident: Boolean = false); overload; virtual; abstract;
     function AsJSON(const Ident: Boolean = False): String; inline;
     property Self: T read GetSelf;
+    property DataType: TDataType read GetDataType;
   end;
 
 
@@ -606,6 +610,20 @@ begin
   else
   if Self.InheritsFrom(TSuperArray) then
      Result := TJSONArray(FInterface).Get(TValue.From<Typ>(Key).AsInteger);
+end;
+
+function TBaseJSON<T, Typ>.GetDataType: TDataType;
+var
+  Cast: ICast;
+begin
+  if TValue.From<T>(FJSONObj).AsInterface <> nil then
+     Cast := TCast.CreateFrom<T>(FJSONObj)
+  else
+  if Assigned(FCasted)  then
+     Cast := TCast.Create(FCasted)
+  else
+     Exit(dtNil);
+  Result := Cast.DataType
 end;
 
 function TBaseJSON<T, Typ>.GetDouble(V: Typ): Double;
