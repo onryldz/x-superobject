@@ -408,7 +408,10 @@ type
  {$ELSE}
    const CharIndex = 1;
  {$ENDIF}
- 
+
+var
+  JSONDateFormat: String = 'yyyy-mm-dd"T"hh:mm:ss';
+
 implementation
 
 
@@ -768,6 +771,8 @@ begin
           F[V] := Value;
        varBoolean:
           B[V] := Value;
+       varDate:
+          S[V] := FormatDateTime( JSONDateFormat, TDateTime(Value) );
        varNull:
           Null[V] := jNull;
      end;
