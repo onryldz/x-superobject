@@ -388,10 +388,12 @@ type
   private
     FName: String;
     FTriggers: array[#0..MaxCHR] of TTrigger;
+    FTriggerList: TObjectList<TTrigger>;
     function GetIndex(Ch: WideChar): TTrigger; inline;
     function GetName: String;
   public
     constructor Create(const Name: String);
+    destructor Destroy; override;
     property Name: String read GetName;
     procedure Add(const Chars: TRouteChars; Trigger: TTrigger);
     procedure NoRoute(Trigger: TTrigger);
@@ -734,6 +736,10 @@ var
   Ch: WideChar;
 begin
   Ch := #0;
+
+  if not FTriggerList.Contains(Trigger) then
+     FTriggerList.Add(Trigger);
+
   while Ch <= MaxCHR do
   begin
      if Ch in Chars then
@@ -746,8 +752,15 @@ end;
 constructor TRoute.Create(const Name: String);
 begin
   FName := Name;
+  FTriggerList := TObjectList<TTrigger>.Create;
 end;
 
+
+destructor TRoute.Destroy;
+begin
+  FTriggerList.Free;
+  inherited;
+end;
 
 function TRoute.GetIndex(Ch: WideChar): TTrigger;
 begin
@@ -765,6 +778,10 @@ var
   Ch: WideChar;
 begin
   Ch := #0;
+
+  if not FTriggerList.Contains(Trigger) then
+     FTriggerList.Add(Trigger);
+
   while Ch <= MaxCHR do
   begin
      if not Assigned(FTriggers[Ch]) then
