@@ -433,7 +433,7 @@ var
 begin
   if (Self.InheritsFrom(TSuperArray)) and (Trim(JSON) = '{}') then JSON := '[]';
   JVal := TJSONObject.ParseJSONValue(JSON);
-  if JVal.QueryInterface(PTypeInfo(TypeInfo(T)).TypeData.Guid, FJSONObj) = S_OK then
+  if JVal.QueryInterface(GetTypeData(TypeInfo(T)).Guid, FJSONObj) = S_OK then
      FInterface := TValue.From<T>(FJSONObj).AsInterface
   else
      FCasted := JVal
