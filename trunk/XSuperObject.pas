@@ -347,7 +347,7 @@ type
     class procedure ReadRecord(Info: PTypeInfo; ARecord: Pointer; IResult: ISuperObject);
     class function  ReadRecordEx<T>(Rec: T): ISuperObject;
     class procedure ReadMembers(Data: Pointer; aType: TRttiType; IJsonData: ISuperObject);
-    class procedure ReadMember<T, Typ>(Member: Typ; TypeKind: TTypeKind; MemberValue: TValue; IJsonData: IBaseJSON<T, Typ>);
+    class procedure ReadMember<T, Typ>(Member: Typ; RType: PTypeInfo; MemberValue: TValue; IJsonData: IBaseJSON<T, Typ>);
 
     class procedure ReadSet(Val: TValue; IJsonData: ISuperArray);
     class procedure ReadVariantOfArray(Val: Variant; IJsonData: ISuperArray);
@@ -1177,9 +1177,9 @@ var
   Field: TRttiField;
 begin
   for Prop in aType.GetProperties do
-      ReadMember<IJSONObject, String>(Prop.Name, Prop.PropertyType.TypeKind, Prop.GetValue(Data), IJSonData);
+      ReadMember<IJSONObject, String>(Prop.Name, Prop.PropertyType.Handle, Prop.GetValue(Data), IJSonData);
   for Field in aType.GetFields do
-      ReadMember<IJSONObject, String>(Field.Name, Field.FieldType.TypeKind, Field.GetValue(Data), IJSonData);
+      ReadMember<IJSONObject, String>(Field.Name, Field.FieldType.Handle, Field.GetValue(Data), IJSonData);
 end;
 
 class procedure TSerializeParse.ReadObject(AObject: TObject; IResult: ISuperObject);
@@ -1351,13 +1351,15 @@ begin
   end;
 end;
 
-class procedure TSerializeParse.ReadMember<T, Typ>(Member: Typ; TypeKind: TTypeKind; MemberValue: TValue; IJsonData: IBaseJSON<T, Typ>);
+class procedure TSerializeParse.ReadMember<T, Typ>(Member: Typ; RType: PTypeInfo; MemberValue: TValue; IJsonData: IBaseJSON<T, Typ>);
 var
   I: Integer;
   SubVal: TValue;
 begin
-
-  case TypeKind of
+  if RType = TypeInfo(TDateTime) then
+     IJSonData.S[Member] := FormatDateTime(JSONDateFormat, MemberValue.AsType<TDateTime>)
+  else
+  case RType.Kind of
     tkInteger:
        IJSonData.I[Member] := MemberValue.AsInteger;
 
@@ -1395,7 +1397,7 @@ begin
            for I := 0 to GetArrayLength - 1 do
            begin
                SubVal := GetArrayElement(I);
-               ReadMember<IJSONArray, Integer>( I, SubVal.Kind, SubVal, IJsonData.A[Member]);
+               ReadMember<IJSONArray, Integer>( I, SubVal.TypeInfo, SubVal, IJsonData.A[Member]);
            end;
 
     tkRecord:
