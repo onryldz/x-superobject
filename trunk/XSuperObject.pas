@@ -1187,7 +1187,6 @@ var
   Ctx: TRttiContext;
   Typ: TRttiType;
 begin
-
   Ctx := TRttiContext.Create;
   try
     Typ := Ctx.GetType(AObject.ClassType);
@@ -1382,7 +1381,7 @@ begin
        ReadSet(MemberValue, IJsonData.A[Member]);
 
     tkClass, tkPointer:
-       if MemberValue.IsObject then
+       if MemberValue.IsObject and (MemberValue.AsObject <> Nil) then
           ReadObject(MemberValue.AsObject, IJSonData.O[Member]);
 
     tkVariant:
