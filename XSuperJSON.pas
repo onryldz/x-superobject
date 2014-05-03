@@ -20,7 +20,7 @@ unit XSuperJSON;
 interface
 
 uses
-  SysUtils, Classes, Generics.Collections, Math;
+  SysUtils, Classes, Generics.Collections, Math, DateUtils, RegularExpressions, RTTI;
 
 
 const
@@ -45,7 +45,7 @@ type
     Line: Integer;
   end;
 
-  TDataType = (dtNil, dtNull, dtObject, dtArray, dtString, dtInteger, dtFloat, dtBoolean);
+  TDataType = (dtNil, dtNull, dtObject, dtArray, dtString, dtInteger, dtFloat, dtBoolean, dtDateTime, dtDate, dtTime);
 
   // ## Exception
 
@@ -170,6 +170,54 @@ type
     property Value;
   end;
 
+  IJSONBaseDate<T> = interface(IJSONValue<T>)
+  ['{7ACB3D47-A9A6-49C1-AFF3-F451368EAE48}']
+    function GetAsString: String;
+    property AsString: String read GetAsString;
+  end;
+
+  TJSONBaseDate<T> = class(TJSONValue<T>, IJSONBaseDate<T>)
+  protected
+    FFormat: String;
+  public
+    function GetAsString: String;
+    procedure AsJSONString(Str: TJSONWriter); override;
+  end;
+
+  IJSONDateTime = interface(IJSONBaseDate<TDateTime>)['{9441CA2E-B822-4C13-ABF0-15F8026CCE50}']end;
+  TJSONDateTime = class(TJSONBaseDate<TDateTime>, IJSONDateTime)
+  public
+    constructor Create(const Value: TDateTime; const Format: String = 'yyyy-mm-dd"T"hh:mm:ss.zzz');
+    property Value;
+  end;
+
+  IJSONDate = interface(IJSONBaseDate<TDate>)['{A862D6A5-2C4A-41CD-B2C0-F7B58FA14066}']end;
+  TJSONDate = class(TJSONBaseDate<TDate>, IJSONDate)
+  public
+    constructor Create(const Value: TDate; const Format: String = 'yyyy-mm-dd');
+    property Value;
+  end;
+
+  IJSONTime = interface(IJSONBaseDate<TTime>)['{EEBCD145-B837-4129-A21D-378DF7DA53B2}']end;
+  TJSONTime = class(TJSONBaseDate<TTime>, IJSONTime)
+  public
+    constructor Create(const Value: TTime; const Format: String = 'hh:mm:ss');
+    property Value;
+  end;
+
+
+  TJSONDateTimeCheckCallBack = reference to function(const Str: String; var Value: TDateTime; var Typ: TDataType): Boolean;
+  TJSONDateManager = class
+  private
+    class var FFormats: TList<TJSONDateTimeCheckCallBack>;
+    class function GetFormats: TList<TJSONDateTimeCheckCallBack>; static; inline;
+  public
+    class constructor Create;
+    class destructor Destroy;
+    class function Check(const Data: String; var AValue: TDateTime; var Typ: TDataType): Boolean;
+    class property Formats: TList<TJSONDateTimeCheckCallBack> read GetFormats;
+  end;
+
   IJSONPair = interface
   ['{D328943F-5ED1-4B35-8332-573156565C96}']
     function GetName: String;
@@ -235,7 +283,7 @@ type
     procedure Remove(const Name: String); overload;
     procedure Remove(const Index: Integer); overload;
     function GetEnumerator: TJSONEnumerator<IJSONPair>;
-    class function ParseJSONValue(const Str: String): IJSONAncestor;
+    class function ParseJSONValue(const Str: String; const CheckDate: Boolean): IJSONAncestor;
   end;
 
   IJSONArray = interface(IJSONValue<IJSONAncestor>)
@@ -276,8 +324,9 @@ type
   TJSONBuilder = class
   private
     LGen: TLexGenerator;
+    FCheckDates: Boolean;
   public
-    constructor Create(const JSON: String);
+    constructor Create(const JSON: String; const CheckDates: Boolean);
     destructor Destroy; override;
     function  ReadValue: IJSONAncestor;
     procedure ReadString(var Val: IJSONAncestor);
@@ -466,10 +515,33 @@ type
 
   TSuperParser = class
   public
-    class function ParseJSON(const S: String): IJSONAncestor;
+    class function ParseJSON(const S: String; const CheckDateTime: Boolean): IJSONAncestor;
   end;
 
-
+  TISO8601 = record
+  private
+    FData: TMatch;
+    FSuccess: Boolean;
+    FOffset: Integer;
+    FUseTime: Boolean;
+    FUseDate: Boolean;
+    FValue: TDateTime;
+    FValueType: TDataType;
+    function NextOffset: Integer;
+    function GetIntData(const Index: Integer): Integer; overload; inline;
+    function GetIntData(const Index: Integer; const P: Boolean): Integer; overload;
+    function GetStrData(const Index: Integer): String; inline;
+    procedure ReadStructure;
+    function ReadDate: Boolean;
+    function ReadTime: Boolean;
+    procedure ReadMS;
+    procedure ReadTZ(const P: Boolean);
+  public
+    constructor Create(const Value: String);
+    property Value: TDateTime read FValue;
+    property ValueType: TDataType read FValueType;
+    property Success: Boolean read FSuccess;
+  end;
 
 implementation
 
@@ -701,12 +773,12 @@ end;
 
 { TSuperParser }
 
-class function TSuperParser.ParseJSON(const S: String): IJSONAncestor;
+class function TSuperParser.ParseJSON(const S: String; const CheckDateTime: Boolean): IJSONAncestor;
 var
   JSON: TJSONBuilder;
 begin
   try
-    JSON := TJSONBuilder.Create(S);
+    JSON := TJSONBuilder.Create(S, CheckDateTime);
     Result := JSON.ReadValue;
   finally
     if Assigned(JSON) then
@@ -1205,10 +1277,11 @@ end;
 
 { TJSONBuilder }
 
-constructor TJSONBuilder.Create(const JSON: String);
+constructor TJSONBuilder.Create(const JSON: String; const CheckDates: Boolean);
 begin
   LGen := TLexGenerator.Create(JSONLexGrammar);
   LGen.Load(JSON);
+  FCheckDates := CheckDates;
 end;
 
 destructor TJSONBuilder.Destroy;
@@ -1279,8 +1352,25 @@ begin
 end;
 
 procedure TJSONBuilder.ReadString(var Val: IJSONAncestor);
+var
+  dT: TDateTime;
+  DVal: TDataType;
+label
+  JMP;
 begin
-  Val := TJSONString.Create( LGen.Current.Str );
+  if not FCheckDates then
+     JMP:Val := TJSONString.Create( LGen.Current.Str )
+  else
+     if TJSONDateManager.Check(LGen.Current.Str, dT, DVal ) then
+        case DVal of
+           dtDateTime: Val := TJSONDateTime.Create(dT);
+           dtDate    : Val := TJSONDate.Create(TDate(dT));
+           dtTime    : Val := TJSONTime.Create(TTime(dT));
+           else
+             goto JMP;
+        end
+     else
+       goto JMP;
   LGen.KillLex;
 end;
 
@@ -1451,9 +1541,9 @@ begin
   Result.List := FPairList;
 end;
 
-class function TJSONObject.ParseJSONValue(const Str: String): IJSONAncestor;
+class function TJSONObject.ParseJSONValue(const Str: String; const CheckDate: Boolean): IJSONAncestor;
 begin
-  Result := TSuperParser.ParseJSON(Str);
+  Result := TSuperParser.ParseJSON(Str, CheckDate);
 end;
 
 procedure TJSONObject.Remove(P: IJSONPair);
@@ -1917,9 +2007,226 @@ begin
   Result := FData.ToString;
 end;
 
+{ TJSONDateTime }
+
+constructor TJSONDateTime.Create(const Value: TDateTime; const Format: String);
+begin
+  inherited Create(Value);
+  FFormat := Format;
+end;
+
+{ TJSONDateManager }
+
+class function TJSONDateManager.Check(const Data: String; var AValue: TDateTime;
+  var Typ: TDataType): Boolean;
+var
+  CallBck: TJSONDateTimeCheckCallBack;
+begin
+  for CallBck in FFormats do
+      if CallBck(Data, AValue, Typ) then
+         Exit(True);
+  Result := False;
+end;
+
+class constructor TJSONDateManager.Create;
+begin
+  FFormats := TList<TJSONDateTimeCheckCallBack>.Create;
+end;
+
+class destructor TJSONDateManager.Destroy;
+begin
+  FFormats.Free;
+end;
+
+class function TJSONDateManager.GetFormats: TList<TJSONDateTimeCheckCallBack>;
+begin
+  Result := FFormats;
+end;
+
+{ TISO8601 }
+
+constructor TISO8601.Create(const Value: String);
+var
+  Matches: TMatchCollection;
+begin
+  FillChar(Self, SizeOf(TISO8601), #0);
+  Matches := TRegEx.Matches(Value, '(?=\d{4})((\d{4})-(\d{2})-(\d{2}))?(T(\d{2})\:(\d{2})\:'+
+                                   '(\d{2})(.(\d{1,3}))?([+-](\d{2})\:(\d{2}))?)?|(\d{2})\:'+
+                                   '(\d{2})\:(\d{2})(.(\d{1,3}))?([+-](\d{2})\:(\d{2}))?');
+  if Matches.Count <> 1 then
+     Exit;
+  FSuccess := True;
+  FData := Matches.Item[0];
+  ReadStructure;
+end;
+
+function TISO8601.GetIntData(const Index: Integer): Integer;
+begin
+  Result := StrToInt(GetStrData(Index));
+end;
+
+function TISO8601.GetIntData(const Index: Integer; const P: Boolean): Integer;
+begin
+  Result := GetIntData(Index);
+  if not P then
+     Result := -1 * Result;
+end;
+
+function TISO8601.GetStrData(const Index: Integer): String;
+begin
+  Result := FData.Groups.Item[Index].Value;
+end;
+
+function TISO8601.NextOffset: Integer;
+begin
+  Inc(FOffset);
+  Result := FOffset;
+end;
+
+procedure TISO8601.ReadStructure;
+var
+  Len: Integer;
+  Grp: TGroup;
+begin
+  FOffset := 1;
+  Len := FData.Groups.Count - 1;
+  if (Length(GetStrData(2)) = 4 (*UseDate*)) and not ReadDate then
+  begin
+     FSuccess := False;
+     Exit;
+  end
+  else
+  if (Len > 13) and (Length(GetStrData(14)) = 2(*UseTime*)) then
+  begin
+    FOffset := 13;
+    if not ReadTime then
+    begin
+       FSuccess := False;
+       Exit;
+    end;
+  end;
+
+  while FOffset <= Len do
+  begin
+    Grp := FData.Groups.Item[FOffset];
+    with Grp do
+       if Value > '' then
+          case Value[CharIndex] of
+            'T', 't': begin
+               FUseTime := True;
+               if not ReadTime then
+               begin
+                  FSuccess := False;
+                  Exit;
+               end;
+            end;
+            '.': if FUseTime then ReadMS;
+            '+': if FUseTime then ReadTZ(True);
+            '-': if FUseTime then ReadTZ(False);
+          end;
+    Inc(FOffset);
+  end;
+  if FUseDate and FUseTime then
+     FValueType := dtDateTime
+  else if FUseDate then
+     FValueType := dtDate
+  else if FUseTime then
+     FValueType := dtTime;
+end;
+
+function TISO8601.ReadDate: Boolean;
+begin
+ Result := True;
+ if not TryEncodeDate( GetIntData(NextOffset), GetIntData(NextOffset), GetIntData(NextOffset), FValue ) then
+ begin
+    FValue := 0;
+    Result := False;
+ end
+ else
+ begin
+    FUseDate := True;
+    NextOffset;
+ end;
+end;
+
+procedure TISO8601.ReadMS;
+var
+  Temp: TDateTime;
+begin
+  if TryEncodeTime(0, 0, 0, GetIntData(NextOffset), Temp) then
+     FValue := FValue + TTime(Temp);
+end;
+
+function TISO8601.ReadTime: Boolean;
+var
+  Temp: TDateTime;
+begin
+  if TryEncodeTime(GetIntData(NextOffset), GetIntData(NextOffset), GetIntData(NextOffset), 0, Temp ) then
+  begin
+     FValue := FValue + TTime(Temp);
+     FUseTime := True;
+     Result := True;
+  end
+  else
+     Result := False;
+end;
+
+procedure TISO8601.ReadTZ(const P: Boolean);
+begin
+  FValue := IncHour(FValue, -1 * GetIntData(NextOffset, P));
+  FValue := IncMinute(FValue, -1 * GetIntData(NextOffset, P));
+  FValue := TTimeZone.Local.ToLocalTime(FValue)
+end;
+
+
+{ TJSONDate }
+
+constructor TJSONDate.Create(const Value: TDate; const Format: String);
+begin
+  inherited Create(Value);
+  FFormat := Format;
+end;
+
+{ TJSONTime }
+
+constructor TJSONTime.Create(const Value: TTime; const Format: String);
+begin
+  inherited Create(Value);
+  FFormat := Format;
+end;
+
+{ TJSONBaseDate<T> }
+
+procedure TJSONBaseDate<T>.AsJSONString(Str: TJSONWriter);
+begin
+  if FNull then
+     Str.AppendVal( cNull )
+  else
+     Str.AppendVal( '"' +  GetAsString + '"' );
+end;
+
+function TJSONBaseDate<T>.GetAsString: String;
+begin
+   Result := FormatDateTime(FFormat, TValue.From<T>(FData).AsType<TDateTime>)
+end;
+
 initialization
 
   JSONLexGrammar := TJSONGrammar.Create;
+
+  TJSONDateManager.Formats.Add( (* ISO-8601 | [Date] + [ Time + [MS] + [UTC] ] *)
+     function(const Str: String; var AValue: TDateTime; var Typ: TDataType): Boolean
+     begin
+         with TISO8601.Create(Str) do
+         begin
+            Result := Success;
+            if Result then
+            begin
+               AValue := Value;
+               Typ := ValueType;
+            end;
+         end;
+     end);
 
 finalization
 
