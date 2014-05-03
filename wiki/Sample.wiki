@@ -238,7 +238,7 @@ type
     Parse: TTest; // For Class;
     S: String;
   begin
-    Parse := TTest.FromJSON(('{"A": 1, "B": 0, "C": true, "D": "Hello", "E":{"A": 3, "B": "Delphi"}, "F": {"A": 4, "B": 5}, "G": [0,2], "H": "2014-05-03T03:25:05.059", "J": "2014-05-03", "K": "03:25:05"}');
+    Parse := TTest.FromJSON('{"A": 1, "B": 0, "C": true, "D": "Hello", "E":{"A": 3, "B": "Delphi"}, "F": {"A": 4, "B": 5}, "G": [0,2], "H": "2014-05-03T03:25:05.059", "J": "2014-05-03", "K": "03:25:05"}');
     S := Parse.AsJSON;
   end;
   
