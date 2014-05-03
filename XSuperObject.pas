@@ -1958,7 +1958,7 @@ begin
   if not Assigned(FJSON) then
      Result := ''
   else
-     Result := TJSONString(FJSON).Value;
+     Result := VarToStr(FJSON.AsVariant);
 end;
 
 function TCast.GetTime: TTime;
@@ -2046,6 +2046,12 @@ begin
         AsFloat   := Value;
      dtBoolean:
         AsBoolean := Value;
+     dtDateTime:
+        AsDateTime := Value;
+     dtDate:
+        AsDate := Value;
+     dtTime:
+        AsTime := Value;
    end;
 end;
 
