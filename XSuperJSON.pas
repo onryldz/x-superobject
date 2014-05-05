@@ -2034,8 +2034,15 @@ begin
 end;
 
 class destructor TJSONDateManager.Destroy;
+var
+  I: Integer;
 begin
-  FFormats.Free;
+  if Assigned(FFormats) then
+  begin
+    for I := 0 to FFormats.Count - 1 do
+        FFormats[I]._Release;
+    FFormats.Free;
+  end;
 end;
 
 class function TJSONDateManager.GetFormats: TList<TJSONDateTimeCheckCallBack>;
