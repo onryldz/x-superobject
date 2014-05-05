@@ -1958,7 +1958,10 @@ begin
   if not Assigned(FJSON) then
      Result := ''
   else
-     Result := VarToStr(FJSON.AsVariant);
+     if FJSON is TJSONString then
+        Result := TJSONString(FJSON).Value
+     else
+        Result := VarToStr(FJSON.AsVariant);
 end;
 
 function TCast.GetTime: TTime;
