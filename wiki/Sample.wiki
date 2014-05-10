@@ -88,6 +88,80 @@ begin
 end;
 }}}
 
+*Where*
+{{{
+var
+  FilterJSON: ISuperObject;
+begin
+  FilterJSON := SO('{ Table: [ '+
+                   '   { '+
+                   '      Name: "Sakar SHAKIR", ' +
+                   '      Sex: "M",  ' +
+                   '      Size: 1.75 '+
+                   '   }, '+
+                   '   {  '+
+                   '      Name: "Bulent ERSOY", ' +
+                   '      Sex: "F",  ' +
+                   '      Size: 1.60 '+
+                   '   }, '+
+                   '   { '+
+                   '      Name: "Cicek ABBAS", ' +
+                   '      Sex: "M",  ' +
+                   '      Size: 1.65 '+
+                   '   } '+
+                   '  ] '+
+                   '}');
+  Memo1.Lines.Add(
+      FilterJSON.A['Table'].Where(function(const Arg: IMember): Boolean 
+      begin
+        with Arg.AsObject do
+             Result := (S['Sex'] = 'M') and (F['Size'] > 1.60)
+      end).AsJSON
+  );
+end;
+}}}
+*Output*
+{{{
+[{"Name":"Sakar SHAKIR","Sex":"M","Size":1.75},{"Name":"Cicek ABBAS","Sex":"M","Size":1.65}]
+}}}
+
+*Delete*
+{{{
+var
+  FilterJSON: ISuperObject;
+begin
+  FilterJSON := SO('{ Table: [ '+
+                   '   { '+
+                   '      Name: "Sakar SHAKIR", ' +
+                   '      Sex: "M",  ' +
+                   '      Size: 1.75 '+
+                   '   }, '+
+                   '   {  '+
+                   '      Name: "Bulent ERSOY", ' +
+                   '      Sex: "F",  ' +
+                   '      Size: 1.60 '+
+                   '   }, '+
+                   '   { '+
+                   '      Name: "Cicek ABBAS", ' +
+                   '      Sex: "M",  ' +
+                   '      Size: 1.65 '+
+                   '   } '+
+                   '  ] '+
+                   '}');
+  Memo1.Lines.Add(
+      FilterJSON.A['Table'].Delete(function(const Arg: IMember): Boolean 
+      begin
+        with Arg.AsObject do
+             Result := (S['Sex'] = 'M') and (F['Size'] > 1.60)
+      end).AsJSON
+  );
+end;
+}}}
+*Output*
+{{{
+[{"Name":"Bulent ERSOY","Sex":"F","Size":1.6}]
+}}}
+
 
 *Variant*
 {{{
