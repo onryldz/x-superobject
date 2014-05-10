@@ -1623,8 +1623,7 @@ end;
 
 procedure TJSONArray.Add(Val: IJSONAncestor);
 begin
-  if not FList.Contains(Val) then
-     FList.Add(Val);
+  FList.Add(Val);
 end;
 
 procedure TJSONArray.AsJSONString(Str: TJSONWriter);
@@ -2214,7 +2213,7 @@ end;
 
 function TJSONBaseDate<T>.GetAsString: String;
 begin
-   Result := FormatDateTime(FFormat, TValue.From<T>(FData).AsType<TDateTime>)
+   Result := FormatDateTime(FFormat, PDateTime(@FData)^);
 end;
 
 initialization

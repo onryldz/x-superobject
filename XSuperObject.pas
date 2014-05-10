@@ -46,7 +46,7 @@ type
   end;
 
   TBase = class(TInterfacedObject, IBase)
-    function AsObject: ISuperObject; virtual; 
+    function AsObject: ISuperObject; virtual;
     function AsArray: ISuperArray; virtual;
   end;
 
@@ -104,6 +104,8 @@ type
     function ValueEx<T>: Variant;
   end;
 
+  TCondCallBack<T> = reference to function(const Arg: T): Boolean;
+
   TBaseJSON<T, Typ> = class(TBase, IBaseJSON<T, Typ>)
   protected
     FJSONObj: T;
@@ -111,9 +113,9 @@ type
     FInterface: IInterface;
     FCheckDate: Boolean;
     function ContainsEx(Key: Typ; Value: IJSONAncestor): Boolean;
-    function  DefaultValueClass<TT: Class>(const Value: TValue): TT;
-    procedure Member<T: Class>(const Name: String; const Value: TValue); overload;
-    function  Member(const Name: String): Boolean; overload;
+    function  DefaultValueClass<TT: Class>(const Value): TT;
+    procedure Member<T: Class; TValue>(const Name: Typ; const Value: TValue); overload;
+    function  Member(const Name: Typ): Boolean; overload;
     function  GetValue<C: Class>(const Name: Typ): C;
     function  GetSelf: T;
     function  GetData(Key: Typ): IJSONAncestor;
@@ -270,10 +272,11 @@ type
     function GetCurrentKey: String;
     function GetCurrentValue: IJSONAncestor;
     function GetOffset: Integer;
-    function  GetExpr(const Code: String): ISuperExpression;
+    function GetExpr(const Code: String): ISuperExpression;
 
     procedure SetData(V: String; Data: Variant); overload;
     procedure SetData(V: String; Data: Variant; AFormatSettings: TFormatSettings); overload;
+    procedure Remove(Key: String);
 
     property Expression[const Code: String]: ISuperExpression read GetExpr; default;
     property Count: Integer read GetCount;
@@ -284,6 +287,8 @@ type
     function Clone: ISuperObject;
     function GetEnumerator: TSuperEnumerator<IJSONPair>;
     function T: TSuperObject;
+    function Where(const Cond: TCondCallBack<IMember>): ISuperObject;
+    function Delete(const Cond: TCondCallBack<IMember>): ISuperObject;
   end;
 
   TSuperObject = class(TBaseJSON<IJSONObject, String>, ISuperObject)
@@ -309,7 +314,7 @@ type
 
     procedure SaveTo(Stream: TStream; const Ident: Boolean = false); overload; override;
     procedure SaveTo(AFile: String; const Ident: Boolean = false); overload; override;
-
+    procedure Remove(Key: String);
 
     property Expression[const Code: String]: ISuperExpression read GetExpr; default;
     property Count: Integer read GetCount;
@@ -323,6 +328,8 @@ type
     function Clone: ISuperObject;
     function AsObject: ISuperObject; override;
     function AsArray: ISuperArray; override;
+    function Where(const Cond: TCondCallBack<IMember>): ISuperObject;
+    function Delete(const Cond: TCondCallBack<IMember>): ISuperObject;
   end;
 
   ISuperArray = interface(IBaseJSON<IJSONArray, Integer>)
@@ -332,10 +339,12 @@ type
     procedure Add(Value: Variant; DateFormat: TFormatSettings); overload;
     procedure Add(Value: Variant); overload;
     procedure Add(Value: IJSONAncestor); overload;
-    procedure Delete(Index: Integer);
+    procedure Delete(Index: Integer); overload;
     procedure Clear;
     function Clone: ISuperArray;
     function GetEnumerator: TSuperEnumerator<IJSONAncestor>;
+    function Where(const Cond: TCondCallBack<IMember>): ISuperArray;
+    function Delete(const Cond: TCondCallBack<IMember>): ISuperArray; overload;
   end;
 
   TSuperArray = class(TBaseJSON<IJSONArray, Integer>, ISuperArray)
@@ -349,7 +358,8 @@ type
     procedure Add(Value: ISuperArray); overload;
     procedure Add(Value: Variant; DateFormat: TFormatSettings); overload;
     procedure Add(Value: Variant); overload;
-    procedure Delete(Index: Integer);
+    procedure Delete(Index: Integer); overload;
+    function Delete(const Cond: TCondCallBack<IMember>): ISuperArray; overload;
     procedure Clear;
     property Length: Integer read GetLength;
     function GetEnumerator: TSuperEnumerator<IJSONAncestor>;
@@ -357,6 +367,7 @@ type
     procedure SaveTo(AFile: String; const Ident: Boolean = false); overload; override;
     function Clone: ISuperArray;
     function AsArray: ISuperArray; override;
+    function Where(const Cond: TCondCallBack<IMember>): ISuperArray;
   end;
 
   TSuperProperty = class(TRttiProperty)
@@ -454,9 +465,13 @@ end;
 
 { TSuperObject }
 
+
+
 constructor TBaseJSON<T, Typ>.Create(JSON: String; const CheckDate: Boolean);
+type PInterface = ^IInterface;
 var
   JVal: IJSONAncestor;
+  PIntf: PInterface;
 begin
   FCheckDate := CheckDate;
   if (Self.InheritsFrom(TSuperArray)) and (Trim(JSON) = '{}') then JSON := '[]';
@@ -470,14 +485,14 @@ end;
 function TBaseJSON<T, Typ>.GetValue<C>(const Name: Typ): C;
 begin
   if Self.InheritsFrom(TSuperObject) then
-    with TJSONObject(FInterface).Get(TValue.From<Typ>(Name).AsString) do
+    with TJSONObject(FInterface).Get(PString(@Name)^) do
        if JsonValue is TJSONNull then
           Result := Nil
        else
           Result := JSonValue as C
   else
   if Self.InheritsFrom(TSuperArray) then
-    Result := TJSONArray(FInterface).Get(TValue.From<Typ>(Name).AsInteger) as C
+    Result := TJSONArray(FInterface).Get(PInteger(@Name)^) as C
   else
     Result := Nil;
 end;
@@ -495,25 +510,24 @@ begin
   end;
 end;
 
-function TBaseJSON<T, Typ>.Member(const Name: String): Boolean;
+function TBaseJSON<T, Typ>.Member(const Name: Typ): Boolean;
 begin
   if Self.InheritsFrom(TSuperObject) then
-    Result := Assigned(TJSONObject(FInterface).Get(Name))
+    Result := Assigned(TJSONObject(FInterface).Get(PString(@Name)^))
   else
-    Result := Assigned(TJSONArray(FInterface).Get(StrToInt(Name)))
+    Result := Assigned(TJSONArray(FInterface).Get(PInteger(@Name)^))
 end;
 
-procedure TBaseJSON<T, Typ>.Member<T>(const Name: String; const Value: TValue);
+procedure TBaseJSON<T, Typ>.Member<T, TValue>(const Name: Typ; const Value: TValue);
 var
   Pair: IJSONPair;
-  Index: Integer;
 begin
   if Self.InheritsFrom(TSuperObject) then
   begin
-    Pair := TJSONObject(FInterface).Get(Name);
+    Pair := TJSONObject(FInterface).Get(PString(@Name)^);
     if not Assigned(Pair) then
     begin
-      TJSONObject(FInterface).AddPair(Name, DefaultValueClass<T>(Value) as TJSONAncestor );
+      TJSONObject(FInterface).AddPair(PString(@Name)^, DefaultValueClass<T>(Value) as TJSONAncestor );
       Exit;
     end;
     if Assigned(Pair.JsonValue) then
@@ -522,9 +536,8 @@ begin
   end
   else
   begin
-    Index := StrToInt(Name);
-    if TJSONArray(FInterface).Count - 1 < Index then
-      while TJSONArray(FInterface).Count - 1 < Index do
+    if TJSONArray(FInterface).Count - 1 < PInteger(@Name)^ then
+      while TJSONArray(FInterface).Count - 1 < PInteger(@Name)^ do
         TJSONArray(FInterface).Add(DefaultValueClass<T>(Value) as TJSONAncestor);
   end;
 
@@ -566,46 +579,38 @@ begin
   FInterface := TValue.From<T>(JSON).AsInterface;
 end;
 
-function TBaseJSON<T, Typ>.DefaultValueClass<TT>(const Value: TValue): TT;
+function TBaseJSON<T, Typ>.DefaultValueClass<TT>(const Value): TT;
 var
   r: TRttiContext;
   ty: TRttiType;
   w: word;
 begin
   if TJSONString.InheritsFrom(TT) then
-    Result := TJSONString.Create(Value.AsString) as TT
+    Result := TJSONString.Create(String(Value)) as TT
   else if TJSONInteger.InheritsFrom(TT) then
-    Result := TJSONInteger.Create(Value.AsVariant) as TT
+    Result := TJSONInteger.Create(Integer(Value)) as TT
   else if TJSONFloat.InheritsFrom(TT) then
-    Result := TJSONFloat.Create(Value.AsVariant) as TT
+    Result := TJSONFloat.Create(Double(Value)) as TT
   else if TJSONBoolean.InheritsFrom(TT) then
-    Result := TJSONBoolean.Create(Value.AsBoolean) as TT
+    Result := TJSONBoolean.Create(Boolean(Value)) as TT
   else if TJSONNull.InheritsFrom(TT) then
-    Result := TJSONNull.Create(Value.AsBoolean) as TT
+    Result := TJSONNull.Create(Boolean(Value)) as TT
   else if TJSONDateTime.InheritsFrom(TT) then
-    Result := TJSONDateTime.Create(Value.AsType<TDateTime>) as TT
+    Result := TJSONDateTime.Create(TDateTime(Value)) as TT
   else if TJSONDate.InheritsFrom(TT) then
-    Result := TJSONDate.Create(Value.AsType<TDate>) as TT
+    Result := TJSONDate.Create(TDate(Value)) as TT
   else if TJSONTime.InheritsFrom(TT) then
-    Result := TJSONTime.Create(Value.AsType<TTime>) as TT
+    Result := TJSONTime.Create(TTime(Value)) as TT
   else if TJSONArray.InheritsFrom(TT) then
   begin
-    if not Value.IsEmpty then
-      with Value do
-      begin
-        Result := AsInterface as TT;
-        Exit;
-      end;
+    if Pointer(Value) <> nil then
+       Exit(TT(Value));
     Result := TJSONArray.Create as TT;
   end
   else if TJSONObject.InheritsFrom(TT) then
   begin
-    if not Value.IsEmpty then
-      with Value do
-      begin
-        Result := AsInterface as TT;
-        Exit;
-      end;
+    if Pointer(Value) <> Nil then
+       Exit(TT(Value));
     Result := TJSONObject.Create as TT;
   end
   else
@@ -633,7 +638,7 @@ end;
 function TBaseJSON<T, Typ>.GetBoolean(V: Typ): Boolean;
 begin
   Result := False;
-  if Member(TValue.From<Typ>(V).AsVariant) then
+  if Member(V) then
     Result := GetValue<TJSONAncestor>(V).ValueEx<Boolean>;
 end;
 
@@ -643,7 +648,7 @@ var
 begin
   if Self.InheritsFrom(TSuperObject) then
   begin
-     P := TJSONObject(FInterface).Get(TValue.From<Typ>(Key).AsString);
+     P := TJSONObject(FInterface).Get(PString(@Key)^);
      if Assigned(P) then
         Result := P.JsonValue
      else
@@ -651,7 +656,7 @@ begin
   end
   else
   if Self.InheritsFrom(TSuperArray) then
-     Result := TJSONArray(FInterface).Get(TValue.From<Typ>(Key).AsInteger);
+     Result := TJSONArray(FInterface).Get(PInteger(@Key)^);
 end;
 
 function TBaseJSON<T, Typ>.GetDataType: TDataType;
@@ -671,21 +676,21 @@ end;
 function TBaseJSON<T, Typ>.GetDate(V: Typ): TDate;
 begin
   Result := 0;
-  if Member(TValue.From<Typ>(V).AsVariant) then
+  if Member(V) then
      Result := GetValue<TJSONDate>(V).Value;
 end;
 
 function TBaseJSON<T, Typ>.GetDateTime(V: Typ): TDateTime;
 begin
   Result := 0;
-  if Member(TValue.From<Typ>(V).AsVariant) then
+  if Member(V) then
      Result := GetValue<TJSONDateTime>(V).Value;
 end;
 
 function TBaseJSON<T, Typ>.GetDouble(V: Typ): Double;
 begin
   Result := 0;
-  if Member(TValue.From<Typ>(V).AsVariant) then
+  if Member(V) then
      if GetType(V) = varInt64 then
         Result := GetValue<TJSONInteger>(V).ValueEx<Int64>
      else
@@ -695,7 +700,7 @@ end;
 function TBaseJSON<T, Typ>.GetInteger(V: Typ): Int64;
 begin
   Result := 0;
-  if Member(TValue.From<Typ>(V).AsVariant) then
+  if Member(V) then
     Result := GetValue<TJSONInteger>(V).ValueEx<Int64>;
 end;
 
@@ -717,8 +722,8 @@ var
   J: IJSONArray;
 begin
   Result := Nil;
-  if not Member(TValue.From<Typ>(V).AsVariant) then
-     Member<TJSONArray>(TValue.From<Typ>(V).AsVariant, TValue.Empty);
+  if not Member(V) then
+     Member<TJSONArray, Pointer>(V, nil);
   J := GetValue<TJSONArray>(V);
   Result := TSuperArray.Create(J);
 end;
@@ -726,8 +731,8 @@ end;
 function TBaseJSON<T, Typ>.GetObject(V: Typ): ISuperObject;
 begin
   Result := Nil;
-  if not Member(TValue.From<Typ>(V).AsVariant) then
-    Member<TJSONObject>(TValue.From<Typ>(V).AsVariant, TValue.Empty);
+  if not Member(V) then
+    Member<TJSONObject, Pointer>(V, Nil);
 
   Result := TSuperObject.Create(GetValue<TJSONObject>(V));
 end;
@@ -742,7 +747,7 @@ label
   JMP;
 begin
   Result := '';
-  if Member(TValue.From<Typ>(V).AsVariant) then
+  if Member(V) then
      if FCheckDate then
         case Ancestor[V].DataType of
           dtDateTime : Result := GetValue<TJSONDateTime>(V).GetAsString;
@@ -758,7 +763,7 @@ end;
 function TBaseJSON<T, Typ>.GetTime(V: Typ): TTime;
 begin
   Result := 0;
-  if Member(TValue.From<Typ>(V).AsVariant) then
+  if Member(V) then
      Result := GetValue<TJSONTime>(V).Value;
 end;
 
@@ -789,32 +794,32 @@ end;
 
 procedure TBaseJSON<T, Typ>.SetArray(V: Typ; const Value: ISuperArray);
 begin
-  Member<TJSONArray>(TValue.From<Typ>(V).AsVariant, TValue.From<IJSONArray>(Value.Self) )
+  Member<TJSONArray, IJSONArray>(V, Value.Self )
 end;
 
 procedure TBaseJSON<T, Typ>.SetBoolean(V: Typ; const Value: Boolean);
 begin
-  Member<TJSONBoolean>(TValue.From<Typ>(V).AsVariant, Value)
+  Member<TJSONBoolean, Boolean>(V, Value)
 end;
 
 procedure TBaseJSON<T, Typ>.SetDate(V: Typ; const Value: TDate);
 begin
-  Member<TJSONDate>(TValue.From<Typ>(V).AsVariant, Value);
+  Member<TJSONDate, TDate>(V, Value);
 end;
 
 procedure TBaseJSON<T, Typ>.SetDateTime(V: Typ; const Value: TDateTime);
 begin
-  Member<TJSONDateTime>(TValue.From<Typ>(V).AsVariant, Value);
+  Member<TJSONDateTime, TDateTime>(V, Value);
 end;
 
 procedure TBaseJSON<T, Typ>.SetDouble(V: Typ; const Value: Double);
 begin
-  Member<TJSONFloat>(TValue.From<Typ>(V).AsVariant, Value);
+  Member<TJSONFloat, Double>(V, Value);
 end;
 
 procedure TBaseJSON<T, Typ>.SetInteger(V: Typ; const Value: Int64);
 begin
-  Member<TJSONInteger>(TValue.From<Typ>(V).AsVariant, Value);
+  Member<TJSONInteger, Int64>(V, Value);
 end;
 
 procedure TBaseJSON<T, Typ>.SetNull(V: Typ; const Value: TMemberStatus);
@@ -823,7 +828,7 @@ end;
 
 procedure TBaseJSON<T, Typ>.SetObject(V: Typ; const Value: ISuperObject);
 begin
-  Member<TJSONObject>(TValue.From<Typ>(V).AsVariant, TValue.From<IJSONObject>(Value.Self) )
+  Member<TJSONObject, IJSONObject>(V, Value.Self )
 end;
 
 procedure TBaseJSON<T, Typ>.SetString(V: Typ; const Value: String);
@@ -843,9 +848,9 @@ begin
            JERR: raise SOInvalidDate.Create('Invalid date format.')
         else
            case ValType of
-             dtDateTime: Member<TJSONDateTime>(TValue.From<Typ>(V).AsVariant, Value);
-             dtDate: Member<TJSONDate>(TValue.From<Typ>(V).AsVariant, Value);
-             dtTime: Member<TJSONTime>(TValue.From<Typ>(V).AsVariant, Value);
+             dtDateTime: Member<TJSONDateTime, TDateTime>(V, dT);
+             dtDate: Member<TJSONDate, TDate>(V, TDate(dT));
+             dtTime: Member<TJSONTime, TTime>(V, TTime(dT));
              else
                goto JERR;
            end;
@@ -854,12 +859,12 @@ begin
        goto JMP;
   end
   else
-     JMP: Member<TJSONString>(TValue.From<Typ>(V).AsVariant, Value);
+     JMP: Member<TJSONString, String>(V, Value);
 end;
 
 procedure TBaseJSON<T, Typ>.SetTime(V: Typ; const Value: TTime);
 begin
-  Member<TJSONTime>(TValue.From<Typ>(V).AsVariant, Value);
+  Member<TJSONTime, TTime>(V, Value);
 end;
 
 procedure TBaseJSON<T, Typ>.SetVariant(V: Typ; const Value: Variant);
@@ -900,7 +905,7 @@ end;
 
 function TSuperObject.AsArray: ISuperArray;
 begin
-  if not Assigned(FCasted) or not (FCasted is TJSONArray) then 
+  if not Assigned(FCasted) or not (FCasted is TJSONArray) then
      Exit(Nil)
   else
      Result := TSuperArray.Create(IJSONArray(FCasted));
@@ -939,6 +944,18 @@ end;
 function TSuperObject.Clone: ISuperObject;
 begin
   Result := SO(AsJSON);
+end;
+
+function TSuperObject.Delete(const Cond: TCondCallBack<IMember>): ISuperObject;
+var
+  Member: IJSONPair;
+begin
+  Result := Self;
+  if not Assigned(Cond) then
+     Exit;
+  for Member in FJSONObj do
+      if Cond(TCast.Create(Member)) then
+         Result.Self.Remove(Member);
 end;
 
 procedure TSuperObject.First;
@@ -1016,6 +1033,11 @@ begin
   finally
     Strm.Free;
   end;
+end;
+
+procedure TSuperObject.Remove(Key: String);
+begin
+  FJSONObj.Remove(Key);
 end;
 
 procedure TSuperObject.SaveTo(Stream: TStream; const Ident: Boolean);
@@ -1098,6 +1120,18 @@ begin
   Result := Self;
 end;
 
+function TSuperObject.Where(const Cond: TCondCallBack<IMember>): ISuperObject;
+var
+  Member: IJSONPair;
+begin
+  Result := TSuperObject.Create('{}', FCheckDate);
+  if not Assigned(Cond) then
+     Exit;
+  for Member in FJSONObj do
+      if Cond(TCast.Create(Member)) then
+         Result.Self.AddPair(Member);
+end;
+
 procedure TSuperObject.SetData(V: String; Data: Variant);
 begin
   SetData(V, Data, FormatSettings);
@@ -1136,7 +1170,7 @@ begin
 end;
 
 procedure TSuperArray.Add(Value: Variant);
-var 
+var
   P: Pointer;
 begin
   if VarType(Value) = varUnknown  then with IUnknown(Value) do
@@ -1172,6 +1206,18 @@ end;
 function TSuperArray.Clone: ISuperArray;
 begin
   Result := SA(AsJSON);
+end;
+
+function TSuperArray.Delete(const Cond: TCondCallBack<IMember>): ISuperArray;
+var
+  Member: IJSONAncestor;
+begin
+  Result := Self;
+  if not Assigned(Cond) then
+     Exit;
+  for Member in FJSONObj do
+      if Cond(TCast.Create(Member)) then
+         Result.Self.Remove(Member);
 end;
 
 procedure TSuperArray.Delete(Index: Integer);
@@ -1232,8 +1278,20 @@ begin
           end;
        end
        else
-          Member<TJSONNull>(IntToStr(V), TValue.From<Boolean>(True));
+          Member<TJSONNull, Boolean>(V, True);
   end;
+end;
+
+function TSuperArray.Where(const Cond: TCondCallBack<IMember>): ISuperArray;
+var
+  Member: IJSONAncestor;
+begin
+  Result := TSuperArray.Create('[]', FCheckDate);
+  if not Assigned(Cond) then
+     Exit;
+  for Member in FJSONObj do
+      if Cond(TCast.Create(Member)) then
+         Result.Self.Add(Member);
 end;
 
 procedure TSuperArray.Add(Value: ISuperObject);
@@ -1416,7 +1474,7 @@ class function TSerializeParse.GetValue<Typ>(Data: Pointer;
 begin
   if (TypeInfo(Typ) = TypeInfo(Integer) ) and ( GetMemberTypeInfo(Member, False).Kind = tkDynArray ) then
       Result := GetValue<String>(GetArrayRawData(Member), Member, '')
-                        .GetArrayElement(TValue.From<Typ>(MIdx).AsInteger)
+                        .GetArrayElement(PInteger(@MIdx)^)
   else
 
   if Member is TRttiProperty  then
@@ -1503,7 +1561,7 @@ begin
 
     tkVariant:
        if TypeInfo(Typ) = TypeInfo(String) then
-          ReadVariantOfObject(MemberValue.AsVariant, TValue.From<Typ>(Member).AsString, ISuperObject(IJsonData))
+          ReadVariantOfObject(MemberValue.AsVariant, PString(@Member)^, ISuperObject(IJsonData))
        else
        if TypeInfo(Typ) = TypeInfo(Integer) then
           ReadVariantOfArray(MemberValue.AsVariant, ISuperArray(IJsonData) );
@@ -1572,7 +1630,7 @@ end;
 class procedure TSerializeParse.SetValue<Typ>(Data: Pointer; Member: TRttiMember; MIdx: Typ; Val: TValue);
 begin
   if (TypeInfo(Typ) = TypeInfo(Integer) ) and ( GetMemberTypeInfo(Member, False).Kind = tkDynArray ) then
-      GetValue<String>(GetArrayRawData(Member), Member, '').SetArrayElement(TValue.From<Typ>(MIdx).AsInteger, Val)
+      GetValue<String>(GetArrayRawData(Member), Member, '').SetArrayElement(PInteger(@MIdx)^, Val)
   else
   if Member is TRttiProperty  then
      TRttiProperty(Member).SetValue(Data, Val)
@@ -1741,6 +1799,7 @@ var
   I: Integer;
   Val: TValue;
 begin
+  Sets := [];
   for I := 0 to IJSONData.Length -1 do
       Include(Sets, IJSONData.I[I]);
   TValue.Make(Integer(Sets), GetMemberTypeInfo(Member), Val);
