@@ -180,6 +180,12 @@ type
     function GetString: String;
     function GetName: String;
     function GetVariant: Variant;
+    function GetDate: TDate;
+    function GetDateTime: TDateTime;
+    function GetTime: TTime;
+    procedure SetDate(const Value: TDate);
+    procedure SetDateTime(const Value: TDateTime);
+    procedure SetTime(const Value: TTime);
     procedure SetBoolean(const Value: Boolean);
     procedure SetFloat(const Value: Double);
     procedure SetInteger(const Value: Int64);
@@ -193,6 +199,9 @@ type
     property AsFloat: Double read GetFloat write SetFloat;
     property AsBoolean: Boolean read GetBoolean write SetBoolean;
     property AsVariant: Variant read GetVariant write SetVariant;
+    property AsDateTime: TDateTime read GetDateTime write SetDateTime;
+    property AsDate: TDate read GetDate write SetDate;
+    property AsTime: TTime read GetTime write SetTime;
     property DataType: TDataType read GetDataType;
     property Name: String read GetName;
     function ToString(const Ident: Boolean = False): String;
@@ -449,7 +458,6 @@ type
    const CharIndex = 1;
  {$ENDIF}
 
-
 implementation
 
 
@@ -583,7 +591,6 @@ function TBaseJSON<T, Typ>.DefaultValueClass<TT>(const Value): TT;
 var
   r: TRttiContext;
   ty: TRttiType;
-  w: word;
 begin
   if TJSONString.InheritsFrom(TT) then
     Result := TJSONString.Create(String(Value)) as TT
@@ -603,14 +610,14 @@ begin
     Result := TJSONTime.Create(TTime(Value)) as TT
   else if TJSONArray.InheritsFrom(TT) then
   begin
-    if Pointer(Value) <> nil then
-       Exit(TT(Value));
+    if Pointer(Value) <> Nil then
+       Exit(TJSONArray(ISuperArray(Value)) as TT);
     Result := TJSONArray.Create as TT;
   end
   else if TJSONObject.InheritsFrom(TT) then
   begin
     if Pointer(Value) <> Nil then
-       Exit(TT(Value));
+       Exit(TJSONObject(ISuperObject(Value)) as TT);
     Result := TJSONObject.Create as TT;
   end
   else
