@@ -389,9 +389,39 @@ type
     ArrayRawData: Pointer;
   end;
 
-  TSerializeParse = class
+  TGenericsType = (gtNil, gtList, gtObjectList);
+  
+  TGenericsInfo = class
+  private
+    FContext: TRttiContext;
+    FType: TRttiType;
+    FAddMethod: TRttiMethod;
+    FCountProperty: TRttiProperty;
+    FGetItemMethod: TRttiIndexedProperty;
   public
+    IsGeneric: Boolean;
+    Typ: TRttiType;
+    CreateArgs: TArray<TValue>;
+    procedure AddVal(Instance: TObject; Val: TValue);
+    function Count(Instance: TObject): Integer;
+    function Item(Instance: TObject; const Index: Integer): TObject;
+    constructor Create(GenericClass: TClass; const AIsGeneric: Boolean; AType: TRttiType);
+    destructor Destroy; override;
+  end;
+
+  TSerializeParse = class
+  private
+    class var FGenericsCache: TObjectDictionary<TClass, TGenericsInfo>;
+  public
+    class constructor Create;
+    class destructor Destroy;
+    class function IsGenerics(Cls: TRttiType): Boolean; overload;
+    class function IsGenerics(Cls: TClass): Boolean; overload;
+    class function GetGenericType(Cls: TClass): TGenericsType;
+    class function GetGenericsCreateArgs(Cls: TRttiType): TArray<TValue>;
+
     // ** Read
+    class procedure ReadGeneric(AObject: TObject; IResult: ISuperArray);
     class procedure ReadObject(AObject: TObject; IResult: ISuperObject);
     class procedure ReadRecord(Info: PTypeInfo; ARecord: Pointer; IResult: ISuperObject);
     class function  ReadRecordEx<T>(Rec: T): ISuperObject;
@@ -404,6 +434,7 @@ type
     class procedure ReadVariantOfObject(Val: Variant; const Name: String; IJsonData: ISuperObject);
 
     // ** Write
+    class procedure WriteGeneric(AObject: TObject; IData: ISuperArray);
     class procedure WriteObject(AObject: TObject; IData: ISuperObject);
     class procedure WriteRecord(Info: PTypeInfo; ARecord: Pointer; IData: ISuperObject);
     class procedure WriteRecordEx<T>(Rec: T; IData: ISuperObject);
@@ -421,6 +452,7 @@ type
     class function  ObjectConstructorParamCount(Instance: TClass): Integer;
     class function  ObjectConstructor(Instance: TClass): TObject;
     class function  CheckObject<Typ>(Data: Pointer; Member: TRttiMember; MIdx: Typ; var Obj: TObject): Boolean;
+
   end;
 
   TSuperObjectHelper = class helper for TObject
@@ -458,8 +490,10 @@ type
    const CharIndex = 1;
  {$ENDIF}
 
+
 implementation
 
+var GenericsUnit : String;
 
 function SO(JSON: String): ISuperObject;
 begin
@@ -1444,6 +1478,16 @@ begin
 
 end;
 
+class constructor TSerializeParse.Create;
+begin
+  FGenericsCache := TObjectDictionary<TClass, TGenericsInfo>.Create([doOwnsValues]);
+end;
+
+class destructor TSerializeParse.Destroy;
+begin
+  FGenericsCache.Free;
+end;
+
 class function TSerializeParse.GetArrayRawData(Member: TRttiMember): Pointer;
 begin
   if Member is TRttiProperty  then
@@ -1451,6 +1495,28 @@ begin
   else
   if Member is TRttiField then
      Result := TSuperField(Member).ArrayRawData
+end;
+
+class function TSerializeParse.GetGenericsCreateArgs(Cls: TRttiType): TArray<TValue>;
+var 
+  Info: TGenericsInfo;
+begin
+  SetLength(Result, 0);
+  if FGenericsCache.TryGetValue(Cls.AsInstance.MetaclassType, Info) then
+     Result := Info.CreateArgs;
+end;
+
+class function TSerializeParse.GetGenericType(Cls: TClass): TGenericsType;
+var
+  Temp: String;
+begin
+  Temp := Cls.ClassName;
+  if Copy(Temp, 1, 6) = 'TList<' then
+     Result := gtList
+  else if Copy(Temp, 1, 12) = 'TObjectList<' then
+     Result := gtObjectList
+  else
+     Result := gtNil
 end;
 
 class function TSerializeParse.GetMemberType(Member: TRttiMember; const GetArray: Boolean): TRttiType;
@@ -1491,6 +1557,46 @@ begin
      Result := TRttiField(Member).GetValue(Data);
 end;
 
+class function TSerializeParse.IsGenerics(Cls: TClass): Boolean;
+var
+  Info: TGenericsInfo;
+begin
+  if FGenericsCache.TryGetValue(Cls, Info) then
+     Result := Info.IsGeneric
+  else
+     Result := False;
+end;
+
+class function TSerializeParse.IsGenerics(Cls: TRttiType): Boolean;
+var
+  C: TClass;
+  Mtd: TRttiMethod;
+  Info: TGenericsInfo;
+  Gt: TGenericsType;
+begin
+  Result := False;
+  C := Cls.AsInstance.MetaclassType;
+  if FGenericsCache.TryGetValue(C, Info) then
+     Exit(Info.IsGeneric);
+
+  if C.UnitName = GenericsUnit then begin
+     Gt := GetGenericType(C);
+     if Gt in [gtList, gtObjectList] then begin
+        Mtd := Cls.GetMethod('First');
+        if (Mtd <> Nil) and (Mtd.MethodKind = mkFunction) then begin // TList<> or TObjectList<>
+           Info := TGenericsInfo.Create(C, True, Mtd.ReturnType);
+           if Gt = gtObjectList then begin
+              SetLength(Info.CreateArgs, 1);
+              Info.CreateArgs[0] := True;
+           end;
+           FGenericsCache.Add(C, Info);
+           Exit(True);
+        end
+     end;
+  end;
+  FGenericsCache.Add(C, TGenericsInfo.Create(Nil, False, Nil));
+end;
+
 class function TSerializeParse.ObjectConstructor(
   Instance: TClass): TObject;
 var
@@ -1500,7 +1606,7 @@ begin
   Ctx := TRttiContext.Create;
   try
     Typ := Ctx.GetType(Instance);
-    Result := Typ.GetMethod('Create').Invoke(Instance, []).AsObject;
+    Result := Typ.GetMethod('Create').Invoke(Instance, GetGenericsCreateArgs(Typ)).AsObject;
   finally
     Ctx.Free;
   end;
@@ -1517,12 +1623,30 @@ begin
   Ctx := TRttiContext.Create;
   try
     Typ := Ctx.GetType(Instance);
+    if IsGenerics(Typ) then
+       Exit(0);
     if not Assigned(Typ) then Exit;
     Mtd := Typ.GetMethod('Create');
     if not Assigned(Mtd) then Exit;
     Result := Length( Mtd.GetParameters );
   finally
     Ctx.Free;
+  end;
+end;
+
+class procedure TSerializeParse.ReadGeneric(AObject: TObject; IResult: ISuperArray);
+var
+  I, Len: Integer;
+  Info: TGenericsInfo;
+  Item: TObject;
+begin
+  Info := FGenericsCache[AObject.ClassType];
+  Len := Info.Count(AObject);
+  for I := 0 to Len - 1do
+  begin
+    Item := Info.Item(AObject, I);
+    if Item <> Nil then
+       ReadObject(Item, IResult.O[I]) 
   end;
 end;
 
@@ -1564,7 +1688,10 @@ begin
 
     tkClass, tkPointer:
        if MemberValue.IsObject and (MemberValue.AsObject <> Nil) then
-          ReadObject(MemberValue.AsObject, IJSonData.O[Member]);
+          if IsGenerics(MemberValue.AsObject.ClassType) then
+             ReadGeneric(MemberValue.AsObject, IJSonData.A[Member])
+          else
+             ReadObject(MemberValue.AsObject, IJSonData.O[Member]);
 
     tkVariant:
        if TypeInfo(Typ) = TypeInfo(String) then
@@ -1590,7 +1717,7 @@ begin
       else
       if (TypeInfo(ISuperArray) = MemberValue.TypeInfo) then
          IJsonData.A[Member] := MemberValue.AsType<ISuperArray>.Clone;
-
+         
   end;
 end;
 
@@ -1646,6 +1773,26 @@ begin
      TRttiField(Member).SetValue(Data, Val);
 end;
 
+class procedure TSerializeParse.WriteGeneric(AObject: TObject; IData: ISuperArray);
+var
+  Info: TGenericsInfo;
+  Ctx: TRttiContext;
+  Typ: TRttiType;
+  Item: TObject;
+  JMembers: IMember;
+begin
+  Info := FGenericsCache[AObject.ClassType];
+  for JMembers in IData do
+      if JMembers.DataType <> dtObject then
+         Continue
+      else
+      begin
+         Item := ObjectConstructor(Info.Typ.AsInstance.MetaclassType);
+         WriteMembers(Item, Info.Typ, JMembers.AsObject);
+         Info.AddVal(AObject, Item);         
+      end;
+end;
+
 class procedure TSerializeParse.WriteMember<T, Typ>(Data: Pointer; Member: Typ;
   RType: PTypeInfo; MemberValue: TRttiMember; IJsonData: IBaseJSON<T, Typ>);
 var
@@ -1697,7 +1844,10 @@ begin
     tkClass:
        begin
           if CheckObject<Typ>(Data, MemberValue, Member, Obj) then
-             WriteObject(Obj, IJSonData.O[Member]);
+             if IsGenerics(Obj.ClassType) then
+                WriteGeneric(Obj, IJSONData.A[Member])
+             else
+                WriteObject(Obj, IJSonData.O[Member]);
        end;
 
     tkVariant:
@@ -2162,5 +2312,47 @@ function TBase.AsObject: ISuperObject;
 begin
   Result := Nil;
 end;
+
+{ TGenericsInfo }
+
+procedure TGenericsInfo.AddVal(Instance: TObject; Val: TValue);
+begin
+  FAddMethod.Invoke(Instance, [Val]);
+end;
+
+function TGenericsInfo.Count(Instance: TObject): Integer;
+begin
+  Result := FCountProperty.GetValue(Instance).AsInteger;
+end;
+
+constructor TGenericsInfo.Create(GenericClass: TClass;const AIsGeneric: Boolean; AType: TRttiType);
+begin
+  IsGeneric := AIsGeneric;
+  Typ := AType;
+  if GenericClass <> Nil then 
+  begin
+     FContext := TRttiContext.Create;
+     FType := FContext.GetType(GenericClass);
+     FAddMethod := FType.GetMethod('Add');
+     FCountProperty := FType.GetProperty('Count');
+     FGetItemMethod := FType.GetIndexedProperty('Items');
+  end
+end;
+
+destructor TGenericsInfo.Destroy;
+begin
+  if IsGeneric then
+     FContext.Free;
+  inherited;
+end;
+
+function TGenericsInfo.Item(Instance: TObject; const Index: Integer): TObject;
+begin
+  Result := FGetItemMethod.GetValue(Instance, [Index]).AsObject;
+end;
+
+initialization
+
+  GenericsUnit := TEnumerable<Boolean>.UnitName;
 
 end.
