@@ -279,6 +279,7 @@ type
     FH: TDateTime;
     FJ: TDate;
     FK: TTime;
+    FList: TObjectList<TSubObj>; // or TList<>; But only object types are supported
   public
     A: Integer;
     B: TTestSet;
@@ -290,6 +291,7 @@ type
     property H: TDateTime read FH write FH;
     property J: TDate read FJ write FJ;
     property K: TTime read FK write FK;
+    property L: TObjectList<TSubObj> read FList write FList;
   end;
   
   TTestRec = record // Only Field Support
@@ -303,6 +305,7 @@ type
     H: TDateTime;
     J: TDate;
     K: TTime;
+    L: TObjectList<TSubObj>; // or TList<>; But only object types are supported
   end;
   
   implementation
@@ -312,7 +315,7 @@ type
     Parse: TTest; // For Class;
     S: String;
   begin
-    Parse := TTest.FromJSON('{"A": 1, "B": 0, "C": true, "D": "Hello", "E":{"A": 3, "B": "Delphi"}, "F": {"A": 4, "B": 5}, "G": [0,2], "H": "2014-05-03T03:25:05.059", "J": "2014-05-03", "K": "03:25:05"}');
+    Parse := TTest.FromJSON('{"A": 1, "B": 0, "C": true, "D": "Hello", "E":{"A": 3, "B": "Delphi"}, "F": {"A": 4, "B": 5}, "G": [0,2], "H": "2014-05-03T03:25:05.059", "J": "2014-05-03", "K": "03:25:05", "L":[{"A": 4, "B": 5},{"A": 6, "B": 7}] }');
     S := Parse.AsJSON;
   end;
   
@@ -322,7 +325,7 @@ type
     Parse: TTestRec; // For Record;
     S: String;
   begin
-    Parse := TSuperRecord<TTestRec>.FromJSON('{"A": 1, "B": 0, "C": true, "D": "Hello", "E":{"A": 3, "B": "Delphi"}, "F": {"A": 4, "B": 5}, "G": [0,2], "H": "2014-05-03T03:25:05.059", "J": "2014-05-03", "K": "03:25:05"}');  
+    Parse := TSuperRecord<TTestRec>.FromJSON('{"A": 1, "B": 0, "C": true, "D": "Hello", "E":{"A": 3, "B": "Delphi"}, "F": {"A": 4, "B": 5}, "G": [0,2], "H": "2014-05-03T03:25:05.059", "J": "2014-05-03", "K": "03:25:05", "L":[{"A": 4, "B": 5},{"A": 6, "B": 7}]}');  
     S := TSuperRecord<TTestRec>.AsJSON(Parse);
   end;
   
