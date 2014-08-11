@@ -332,3 +332,31 @@ type
   
   
 }}}
+
+*Marshalling [ATRIBUTES]*
+{{{
+  TTest = class 
+  public
+    [ALIAS('Type')]
+     Typ: String;
+    [ALIAS('Unit')]
+     Unt: Integer;
+    [REVAL('', '*')]
+     Filter: String;
+  end;
+
+  var X: Test;
+  begin
+    X := TTest.Create;
+    X.Typ := 'XType';
+    X.Unt := 2;
+    X.Filter := '';
+    ShowMessage(X.AsJSON);
+  end;
+}}}
+
+*Output*
+{{{
+{"Type": "XType", "Unit": 2, "Filter", "*"}
+}}}
+------
