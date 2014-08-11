@@ -333,7 +333,7 @@ type
   
 }}}
 
-*Marshalling [ATRIBUTES]*
+*Marshalling ATRIBUTES*
 {{{
   TTest = class 
   public
