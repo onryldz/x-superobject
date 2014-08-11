@@ -40,7 +40,30 @@ type
 
   TMemberStatus = (jUnAssigned, jNull, jAssigned);
 
+  Alias = class(TCustomAttribute)
+  private
+    FName: String;
+  public
+    constructor Create(const AName: String);
+    property Name: String read FName write FName;
+  end;
+
+  REVAL = class(TCustomAttribute)
+  private
+    FEqual: Variant;
+    FValue: Variant;
+  public
+    constructor Create(EQVal: String; NewVal: String); overload;
+    constructor Create(EQVal: Integer; NewVal: Integer); overload;
+    constructor Create(EQVal: Boolean; NewVal: Boolean); overload;
+    constructor Create(EQVal: Double; NewVal: Double); overload;
+    function CheckEQ(Val: TValue): Boolean;
+    property Equal: Variant read FEqual;
+    property Value: Variant read FValue;
+  end;
+
   IBase = interface
+  ['{872FA14E-9276-4F86-A8D8-832CF39DACE6}']
     function AsObject: ISuperObject;
     function AsArray: ISuperArray;
   end;
@@ -171,6 +194,7 @@ type
 
 
   ICast = interface
+  ['{0F5387AB-C1C9-4229-921D-226960332271}']
     function GetArray: ISuperArray;
     function GetBoolean: Boolean;
     function GetDataType: TDataType;
@@ -254,6 +278,7 @@ type
   IMember = ICast;
 
   ISuperExpression = interface(ICast)
+  ['{58366F15-0D83-4BC5-85D5-238E78E73247}']
   end;
 
   TSuperExpression = class(TCast, ISuperExpression)
@@ -412,6 +437,8 @@ type
   TSerializeParse = class
   private
     class var FGenericsCache: TObjectDictionary<TClass, TGenericsInfo>;
+    class procedure GetAliasName(const Attributes: TArray<TCustomAttribute>; var Result: String);
+    class function GetREVAL(const Attributues: TArray<TCustomAttribute>): REVAL;
   public
     class constructor Create;
     class destructor Destroy;
@@ -1385,11 +1412,30 @@ class procedure TSerializeParse.ReadMembers(Data: Pointer; aType: TRttiType; IJs
 var
   Prop: TRttiProperty;
   Field: TRttiField;
+  MemberName: String;
+  RVal: REVAL;
+  Val: TValue;
 begin
   for Prop in aType.GetProperties do
-      ReadMember<IJSONObject, String>(Prop.Name, Prop.PropertyType.Handle, Prop.GetValue(Data), IJSonData);
+  begin
+    MemberName := Prop.Name;
+    GetAliasName(Prop.GetAttributes, MemberName);
+    Val := Prop.GetValue(Data);
+    RVal := GetREVAL(Prop.GetAttributes);
+    if (RVal <> Nil) and (RVal.CheckEQ(Val)) then
+        Val := TValue.FromVariant(RVal.Value);
+    ReadMember<IJSONObject, String>(MemberName, Prop.PropertyType.Handle, Val, IJSonData);
+  end;
   for Field in aType.GetFields do
-      ReadMember<IJSONObject, String>(Field.Name, Field.FieldType.Handle, Field.GetValue(Data), IJSonData);
+  begin
+    MemberName := Field.Name;
+    GetAliasName(Field.GetAttributes, MemberName);
+    Val := Field.GetValue(Data);
+    RVal := GetREVAL(Field.GetAttributes);
+    if (RVal <> Nil) and (RVal.CheckEQ(Val)) then
+        Val := TValue.FromVariant(RVal.Value);
+    ReadMember<IJSONObject, String>(MemberName, Field.FieldType.Handle, Val, IJSonData);
+  end;
 end;
 
 class procedure TSerializeParse.ReadObject(AObject: TObject; IResult: ISuperObject);
@@ -1540,6 +1586,16 @@ class function TSerializeParse.GetMemberTypeInfo(
   Member: TRttiMember; const GetArray: Boolean): PTypeInfo;
 begin
   Result := GetMemberType(Member, GetArray).Handle
+end;
+
+class function TSerializeParse.GetREVAL(const Attributues: TArray<TCustomAttribute>): REVAL;
+var
+  Attr: TCustomAttribute;
+begin
+  for Attr in Attributues do
+      if Attr is REVAL then
+         Exit(REVAL(Attr));
+  Result := Nil;
 end;
 
 class function TSerializeParse.GetValue<Typ>(Data: Pointer;
@@ -1717,7 +1773,7 @@ begin
       else
       if (TypeInfo(ISuperArray) = MemberValue.TypeInfo) then
          IJsonData.A[Member] := MemberValue.AsType<ISuperArray>.Clone;
-         
+
   end;
 end;
 
@@ -1762,15 +1818,27 @@ begin
 end;
 
 class procedure TSerializeParse.SetValue<Typ>(Data: Pointer; Member: TRttiMember; MIdx: Typ; Val: TValue);
+var
+  RVal: REVAL;
 begin
   if (TypeInfo(Typ) = TypeInfo(Integer) ) and ( GetMemberTypeInfo(Member, False).Kind = tkDynArray ) then
       GetValue<String>(GetArrayRawData(Member), Member, '').SetArrayElement(PInteger(@MIdx)^, Val)
   else
   if Member is TRttiProperty  then
+  begin
+     RVal := GetREVAL(TRttiProperty(Member).GetAttributes);
+     if (RVal <> Nil) and (RVal.CheckEQ(Val)) then
+         Val := TValue.FromVariant(RVal.Value);
      TRttiProperty(Member).SetValue(Data, Val)
+  end
   else
   if Member is TRttiField then
+  begin
+     RVal := GetREVAL(TRttiProperty(Member).GetAttributes);
+     if (RVal <> Nil) and (RVal.CheckEQ(Val)) then
+         Val := TValue.FromVariant(RVal.Value);
      TRttiField(Member).SetValue(Data, Val);
+  end;
 end;
 
 class procedure TSerializeParse.WriteGeneric(AObject: TObject; IData: ISuperArray);
@@ -1896,18 +1964,39 @@ begin
   end;
 end;
 
+class procedure TSerializeParse.GetAliasName(const Attributes: TArray<TCustomAttribute>; var Result: String);
+var
+  Attr: TCustomAttribute;
+begin
+  for Attr in Attributes do
+      if Attr is Alias then
+      begin
+         Result := Alias(Attr).Name;
+         Exit;
+      end;
+end;
+
 class procedure TSerializeParse.WriteMembers(Data: Pointer; aType: TRttiType;
   IJsonData: ISuperObject);
 var
   Prop: TRttiProperty;
   Field: TRttiField;
+  MemberName: String;
 begin
   for Prop in aType.GetProperties do
       if Prop.PropertyType <> Nil then
-         WriteMember<IJSONObject, String>(Data, Prop.Name, Prop.PropertyType.Handle, TSuperProperty(Prop), IJSonData);
+      begin
+         MemberName := Prop.Name;
+         GetAliasName(Prop.GetAttributes, MemberName);
+         WriteMember<IJSONObject, String>(Data, MemberName, Prop.PropertyType.Handle, TSuperProperty(Prop), IJSonData);
+      end;
   for Field in aType.GetFields do
       if Field.FieldType <> Nil then
-         WriteMember<IJSONObject, String>(Data, Field.Name, Field.FieldType.Handle, TSuperField(Field), IJSonData);
+      begin
+         MemberName := Field.Name;
+         GetAliasName(Field.GetAttributes, MemberName);
+         WriteMember<IJSONObject, String>(Data, MemberName, Field.FieldType.Handle, TSuperField(Field), IJSonData);
+      end;
 end;
 
 class procedure TSerializeParse.WriteObject(AObject: TObject;
@@ -2349,6 +2438,44 @@ end;
 function TGenericsInfo.Item(Instance: TObject; const Index: Integer): TObject;
 begin
   Result := FGetItemMethod.GetValue(Instance, [Index]).AsObject;
+end;
+
+{ ReNameField }
+
+constructor Alias.Create(const AName: String);
+begin
+  FName := AName;
+end;
+
+{ REVAL }
+
+function REVAL.CheckEQ(Val: TValue): Boolean;
+begin
+  Result := Val.AsVariant = FEqual;
+end;
+
+constructor REVAL.Create(EQVal, NewVal: Integer);
+begin
+  FEqual := EQVal;
+  FValue := NewVal;
+end;
+
+constructor REVAL.Create(EQVal, NewVal: String);
+begin
+  FEqual := EQVal;
+  FValue := NewVal;
+end;
+
+constructor REVAL.Create(EQVal, NewVal: Double);
+begin
+  FEqual := EQVal;
+  FValue := NewVal;
+end;
+
+constructor REVAL.Create(EQVal, NewVal: Boolean);
+begin
+  FEqual := EQVal;
+  FValue := NewVal;
 end;
 
 initialization
