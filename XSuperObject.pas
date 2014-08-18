@@ -62,6 +62,9 @@ type
     property Value: Variant read FValue;
   end;
 
+  DISABLE = class(TCustomAttribute)
+  end;
+
   IBase = interface
   ['{872FA14E-9276-4F86-A8D8-832CF39DACE6}']
     function AsObject: ISuperObject;
@@ -434,11 +437,15 @@ type
     destructor Destroy; override;
   end;
 
+  TAttributeClass = class of TCustomAttribute;
+
   TSerializeParse = class
   private
     class var FGenericsCache: TObjectDictionary<TClass, TGenericsInfo>;
+    class function GetAttribute(AttributeType: TAttributeClass; Attributes: TArray<TCustomAttribute>): TCustomAttribute;
     class procedure GetAliasName(const Attributes: TArray<TCustomAttribute>; var Result: String);
-    class function GetREVAL(const Attributues: TArray<TCustomAttribute>): REVAL;
+    class function  GetREVAL(const Attributues: TArray<TCustomAttribute>): REVAL;
+    class function  IsDisabled(const Attributes: TArray<TCustomAttribute>): Boolean;
   public
     class constructor Create;
     class destructor Destroy;
@@ -1413,28 +1420,50 @@ var
   Prop: TRttiProperty;
   Field: TRttiField;
   MemberName: String;
-  RVal: REVAL;
-  Val: TValue;
+  RevalAttribute: REVAL;
+  Value: TValue;
+  Attributes: TArray<TCustomAttribute>;
 begin
   for Prop in aType.GetProperties do
   begin
     MemberName := Prop.Name;
-    GetAliasName(Prop.GetAttributes, MemberName);
-    Val := Prop.GetValue(Data);
-    RVal := GetREVAL(Prop.GetAttributes);
-    if (RVal <> Nil) and (RVal.CheckEQ(Val)) then
-        Val := TValue.FromVariant(RVal.Value);
-    ReadMember<IJSONObject, String>(MemberName, Prop.PropertyType.Handle, Val, IJSonData);
+    Attributes := Prop.GetAttributes;
+    // * Read Disable
+    if IsDisabled(Attributes) then
+       Continue;
+
+    // * Read Alias Name
+       GetAliasName(Attributes, MemberName);
+
+    Value := Prop.GetValue(Data);
+
+    // * Read Reval Attribute
+       RevalAttribute := GetREVAL(Attributes);
+       if (RevalAttribute <> Nil) and (RevalAttribute.CheckEQ(Value)) then
+           Value := TValue.FromVariant(RevalAttribute.Value);
+
+    ReadMember<IJSONObject, String>(MemberName, Prop.PropertyType.Handle, Value, IJSonData);
   end;
+
   for Field in aType.GetFields do
   begin
     MemberName := Field.Name;
-    GetAliasName(Field.GetAttributes, MemberName);
-    Val := Field.GetValue(Data);
-    RVal := GetREVAL(Field.GetAttributes);
-    if (RVal <> Nil) and (RVal.CheckEQ(Val)) then
-        Val := TValue.FromVariant(RVal.Value);
-    ReadMember<IJSONObject, String>(MemberName, Field.FieldType.Handle, Val, IJSonData);
+    Attributes := Field.GetAttributes;
+    // * Read Disable
+    if IsDisabled(Attributes) then
+       Continue;
+
+    // * Read Alias Name
+      GetAliasName(Field.GetAttributes, MemberName);
+
+    Value := Field.GetValue(Data);
+
+    // * Read Reval Attribute
+       RevalAttribute := GetREVAL(Field.GetAttributes);
+       if (RevalAttribute <> Nil) and (RevalAttribute.CheckEQ(Value)) then
+           Value := TValue.FromVariant(RevalAttribute.Value);
+
+    ReadMember<IJSONObject, String>(MemberName, Field.FieldType.Handle, Value, IJSonData);
   end;
 end;
 
@@ -1543,6 +1572,16 @@ begin
      Result := TSuperField(Member).ArrayRawData
 end;
 
+class function TSerializeParse.GetAttribute(AttributeType: TAttributeClass; Attributes: TArray<TCustomAttribute>): TCustomAttribute;
+var
+  Attr: TCustomAttribute;
+begin
+  for Attr in Attributes do
+      if Attr is AttributeType then
+         Exit(Attr);
+  Result := Nil;
+end;
+
 class function TSerializeParse.GetGenericsCreateArgs(Cls: TRttiType): TArray<TValue>;
 var 
   Info: TGenericsInfo;
@@ -1589,13 +1628,8 @@ begin
 end;
 
 class function TSerializeParse.GetREVAL(const Attributues: TArray<TCustomAttribute>): REVAL;
-var
-  Attr: TCustomAttribute;
 begin
-  for Attr in Attributues do
-      if Attr is REVAL then
-         Exit(REVAL(Attr));
-  Result := Nil;
+  Result := REVAL(GetAttribute(REVAL, Attributues));
 end;
 
 class function TSerializeParse.GetValue<Typ>(Data: Pointer;
@@ -1611,6 +1645,11 @@ begin
   else
   if Member is TRttiField then
      Result := TRttiField(Member).GetValue(Data);
+end;
+
+class function TSerializeParse.IsDisabled(const Attributes: TArray<TCustomAttribute>): Boolean;
+begin
+  Result := GetAttribute(DISABLE, Attributes) <> Nil;
 end;
 
 class function TSerializeParse.IsGenerics(Cls: TClass): Boolean;
@@ -1966,14 +2005,11 @@ end;
 
 class procedure TSerializeParse.GetAliasName(const Attributes: TArray<TCustomAttribute>; var Result: String);
 var
-  Attr: TCustomAttribute;
+  Attr: Alias;
 begin
-  for Attr in Attributes do
-      if Attr is Alias then
-      begin
-         Result := Alias(Attr).Name;
-         Exit;
-      end;
+  Attr := Alias(GetAttribute(Alias, Attributes));
+  if Assigned(Attr) then
+     Result := Attr.Name;
 end;
 
 class procedure TSerializeParse.WriteMembers(Data: Pointer; aType: TRttiType;
@@ -1987,6 +2023,8 @@ begin
       if Prop.PropertyType <> Nil then
       begin
          MemberName := Prop.Name;
+         if IsDisabled(Prop.GetAttributes) then
+            Continue;
          GetAliasName(Prop.GetAttributes, MemberName);
          WriteMember<IJSONObject, String>(Data, MemberName, Prop.PropertyType.Handle, TSuperProperty(Prop), IJSonData);
       end;
@@ -1994,6 +2032,8 @@ begin
       if Field.FieldType <> Nil then
       begin
          MemberName := Field.Name;
+         if IsDisabled(Field.GetAttributes) then
+            Continue;
          GetAliasName(Field.GetAttributes, MemberName);
          WriteMember<IJSONObject, String>(Data, MemberName, Field.FieldType.Handle, TSuperField(Field), IJSonData);
       end;
