@@ -2059,7 +2059,7 @@ var
 begin
   FillChar(Self, SizeOf(TISO8601), #0);
   Matches := TRegEx.Matches(Value, '(?=\d{4})((\d{4})-(\d{2})-(\d{2}))?(T(\d{2})\:(\d{2})\:'+
-                                   '(\d{2})(Z)?(.(\d{1,3}(Z)?))?([+-](\d{2})\:(\d{2}))?)?|(\d{2})\:'+
+                                   '(\d{2})(Z)?(.(\d{1,3})(Z)?)?([+-](\d{2})\:(\d{2}))?)?|(\d{2})\:'+
                                    '(\d{2})\:(\d{2})(.(\d{1,3}))?([+-](\d{2})\:(\d{2}))?');
   if Matches.Count <> 1 then Exit;
   FData := Matches.Item[0];
