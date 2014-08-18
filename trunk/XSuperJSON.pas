@@ -532,6 +532,7 @@ type
     function GetIntData(const Index: Integer; const P: Boolean): Integer; overload;
     function GetStrData(const Index: Integer): String; inline;
     procedure ReadStructure;
+    procedure ReadZulu;
     function ReadDate: Boolean;
     function ReadTime: Boolean;
     procedure ReadMS;
@@ -1113,6 +1114,7 @@ end;
 
 destructor TLexGenerator.Destroy;
 begin
+  KillLex;
   FBuffer.Free;
   if FEscapeSupport then
      FEscapeBuff.Free;
@@ -2057,7 +2059,7 @@ var
 begin
   FillChar(Self, SizeOf(TISO8601), #0);
   Matches := TRegEx.Matches(Value, '(?=\d{4})((\d{4})-(\d{2})-(\d{2}))?(T(\d{2})\:(\d{2})\:'+
-                                   '(\d{2})(.(\d{1,3}))?([+-](\d{2})\:(\d{2}))?)?|(\d{2})\:'+
+                                   '(\d{2})(Z)?(.(\d{1,3}))?([+-](\d{2})\:(\d{2}))?)?|(\d{2})\:'+
                                    '(\d{2})\:(\d{2})(.(\d{1,3}))?([+-](\d{2})\:(\d{2}))?');
   if Matches.Count <> 1 then Exit;
   FData := Matches.Item[0];
@@ -2126,6 +2128,7 @@ begin
                   Exit;
                end;
             end;
+            'Z': if FUseTime then ReadZulu;
             '.': if FUseTime then ReadMS;
             '+': if FUseTime then ReadTZ(True);
             '-': if FUseTime then ReadTZ(False);
@@ -2185,6 +2188,11 @@ begin
 end;
 
 
+procedure TISO8601.ReadZulu;
+begin
+  FValue := TTimeZone.Local.ToLocalTime(FValue);
+end;
+
 { TJSONDate }
 
 constructor TJSONDate.Create(const Value: TDate; const Format: String);
@@ -2220,7 +2228,7 @@ initialization
 
   JSONLexGrammar := TJSONGrammar.Create;
 
-  TJSONDateManager.Formats.Add( (* ISO-8601 | [Date] + [ Time + [MS] + [UTC] ] *)
+  TJSONDateManager.Formats.Add( (* ISO-8601 | [Date] + [ Time + [MS] + [UTC] + [Z] ] *)
      function(const Str: String; var AValue: TDateTime; var Typ: TDataType): Boolean
      begin
          with TISO8601.Create(Str) do
