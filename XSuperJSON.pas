@@ -63,8 +63,9 @@ type
     FData: TStringBuilder;
     FIdent: Boolean;
     FIdentOffset: Integer;
+    FUniversalTime: Boolean;
   public
-    constructor Create(const useIdent: Boolean);
+    constructor Create(const useIdent, useUniversalTime: Boolean);
     destructor Destroy; override;
     procedure Inc;
     procedure Dec;
@@ -76,6 +77,7 @@ type
     function ToString: string; override;
 
     property Ident: Boolean read FIdent;
+    property UniversalTime: Boolean read FUniversalTime;
   end;
 
 
@@ -133,40 +135,37 @@ type
 
   IJSONNull = interface(IJSONValue<Boolean>)['{C19F5715-B832-46D8-8668-1A9DC31393D7}']end;
   TJSONNull = class(TJSONValue<Boolean>, IJSONNull)
-  protected
+  public
     procedure AsJSONString(Str: TJSONWriter); override;
+  protected
     function GetIsNull: Boolean; override;
   end;
 
   IJSONBoolean = interface(IJSONValue<Boolean>)['{CCC8D8C5-081D-4DCF-93DB-CC0696458A12}']end;
   TJSONBoolean = class(TJSONValue<Boolean>, IJSONBoolean)
-  protected
-    procedure AsJSONString(Str: TJSONWriter); override;
   public
+    procedure AsJSONString(Str: TJSONWriter); override;
     property Value;
   end;
 
   IJSONString = interface(IJSONValue<String>)['{C507BB41-3674-4F47-8D6B-5605258F6A2F}']end;
   TJSONString = class(TJSONValue<String>, IJSONString)
-  protected
-    procedure AsJSONString(Str: TJSONWriter); override;
   public
+    procedure AsJSONString(Str: TJSONWriter); override;
     property Value;
   end;
 
   IJSONInteger = interface(IJSONValue<Int64>)['{E9D84348-9634-40F5-8A1F-FF006F45FC6D}']end;
   TJSONInteger = class(TJSONValue<Int64>, IJSONInteger)
-  protected
-    procedure AsJSONString(Str: TJSONWriter); override;
   public
+    procedure AsJSONString(Str: TJSONWriter); override;
     property Value;
   end;
 
   IJSONFloat = interface(IJSONValue<Double>)['{29D840FB-191B-4304-9518-C2937B3AE6B0}']end;
   TJSONFloat = class(TJSONValue<Double>, IJSONFloat)
-  protected
-    procedure AsJSONString(Str: TJSONWriter); override;
   public
+    procedure AsJSONString(Str: TJSONWriter); override;
     property Value;
   end;
 
@@ -201,7 +200,7 @@ type
   IJSONTime = interface(IJSONBaseDate<TTime>)['{EEBCD145-B837-4129-A21D-378DF7DA53B2}']end;
   TJSONTime = class(TJSONBaseDate<TTime>, IJSONTime)
   public
-    constructor Create(const Value: TTime; const Format: String = 'hh:mm:ss');
+    constructor Create(const Value: TTime; const Format: String = 'hh:mm:ss.zzz');
     property Value;
   end;
 
@@ -270,13 +269,13 @@ type
     FNull: Boolean;
   protected
     function GetIsNull: Boolean; override;
-    procedure AsJSONString(Str: TJSONWriter); override;
   public
     constructor Create;
     destructor Destroy; override;
     function Count: Integer;
     function Get(const Name: String): IJSONPair; overload;
     function Get(const Index: Integer): IJSONPair; overload;
+    procedure AsJSONString(Str: TJSONWriter); override;
     procedure AddPair(P: IJSONPair); overload;
     procedure AddPair(Name: String; Value: IJSONAncestor); overload; inline;
     procedure Remove(P: IJSONPair); overload; inline;
@@ -306,10 +305,10 @@ type
     procedure SetIndex(const Int: Integer; const Value: IJSONAncestor);
   protected
     function GetIsNull: Boolean; override;
-    procedure AsJSONString(Str: TJSONWriter); override;
   public
     constructor Create;
     destructor Destroy; override;
+    procedure AsJSONString(Str: TJSONWriter); override;
     procedure Add(Val: IJSONAncestor);
     procedure Remove(Val: IJSONAncestor); overload;
     procedure Remove(Index: Integer); overload;
@@ -431,7 +430,9 @@ type
   TJumpTrigger = class(TTrigger)
   end;
 
+  {$WARNINGS OFF}
   TRouteChars = set of Char;
+  {$WARNINGS ON}
 
   TRoute = class
   private
@@ -487,7 +488,6 @@ type
 
   TLexGenerator = class
   private
-    FNextRoute: TRoute;
     FFirstRoute: TRoute;
     FBuffer: TLexBuff;
     FEscapeBuff: TLexBuff;
@@ -778,8 +778,8 @@ class function TSuperParser.ParseJSON(const S: String; const CheckDateTime: Bool
 var
   JSON: TJSONBuilder;
 begin
+  JSON := TJSONBuilder.Create(S, CheckDateTime);
   try
-    JSON := TJSONBuilder.Create(S, CheckDateTime);
     Result := JSON.ReadValue;
   finally
     if Assigned(JSON) then
@@ -815,9 +815,10 @@ begin
 
   while Ch <= MaxCHR do
   begin
-     if Ch in Chars then
-        if not Assigned(FTriggers[Ch]) then
-           FTriggers[Ch] := Trigger;
+     {$WARNINGS OFF}
+       if Ch in Chars then {$WARNINGS ON}
+         if not Assigned(FTriggers[Ch]) then
+            FTriggers[Ch] := Trigger;
      Inc(Ch);
   end;
 end;
@@ -1135,6 +1136,7 @@ begin
   FCurr := PWideChar(Source);
 end;
 
+{$HINTS OFF}
 procedure TLexGenerator.NextLex;
 var
   Route: TRoute;
@@ -1143,7 +1145,7 @@ var
   UseEscape, UseEscapeEnd: Boolean;
 begin
   CreateLexeme;
-  UseEscape := False;
+   UseEscape := False;
   UseEscapeEnd := False;
   FBuffer.Clear;
   if FEscapeSupport then
@@ -1275,7 +1277,7 @@ begin
   end;
   KillLex;
 end;
-
+{$HINTS ON}
 
 { TJSONBuilder }
 
@@ -1797,6 +1799,7 @@ var
   RName: IJSONAncestor;
   Index: Integer;
 begin
+  Index := 0;
   case LGen.Check([ltIValue, ltName]) of
     ltIValue:
       begin
@@ -1979,11 +1982,12 @@ begin
   Result := Append(IntToStr(Value), CRLF);
 end;
 
-constructor TJSONWriter.Create(const useIdent: Boolean);
+constructor TJSONWriter.Create(const useIdent, useUniversalTime: Boolean);
 begin
   inherited Create;
   FData := TStringBuilder.Create;
   FIdent := useIdent;
+  FUniversalTime := useUniversalTime;
   FIdentOffset := 0;
 end;
 
@@ -2216,7 +2220,12 @@ begin
   if FNull then
      Str.AppendVal( cNull )
   else
-     Str.AppendVal( '"' +  GetAsString + '"' );
+  begin
+     if Str.UniversalTime then
+        Str.AppendVal( '"' +  FormatDateTime(FFormat, TTimeZone.Local.ToUniversalTime(PDateTime(@FData)^)) + 'Z"' )
+     else
+        Str.AppendVal( '"' +  FormatDateTime(FFormat, PDateTime(@FData)^) + '"' );
+  end;
 end;
 
 function TJSONBaseDate<T>.GetAsString: String;
