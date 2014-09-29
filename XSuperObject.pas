@@ -614,7 +614,9 @@ begin
   begin
     if TJSONArray(FInterface).Count - 1 < PInteger(@Name)^ then
       while TJSONArray(FInterface).Count - 1 < PInteger(@Name)^ do
-        TJSONArray(FInterface).Add(DefaultValueClass<MT>(Value) as TJSONAncestor);
+        TJSONArray(FInterface).Add(DefaultValueClass<MT>(Value) as TJSONAncestor)
+    else
+      TJSONArray(FInterface).Index[PInteger(@Name)^] := DefaultValueClass<MT>(Value) as TJSONAncestor
   end;
 end;
 
