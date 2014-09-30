@@ -118,8 +118,8 @@ type
     property Ancestor[V: Typ]: IJSONAncestor read GetAncestor;
     function Contains(Key: Typ): Boolean;
     function GetType(Key: Typ): TVarType;
-    procedure SaveTo(Stream: TStream; const Ident: Boolean = false); overload;
-    procedure SaveTo(AFile: String; const Ident: Boolean = false); overload;
+    procedure SaveTo(Stream: TStream; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload;
+    procedure SaveTo(AFile: String; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload;
     function AsJSON(const Ident: Boolean = False; const UniversalTime: Boolean = False): String;
     property Self: T read GetSelf;
     property DataType: TDataType read GetDataType;
@@ -188,8 +188,8 @@ type
     property Ancestor[V: Typ]: IJSONAncestor read GetAncestor;
     function Contains(Key: Typ): Boolean;
     function GetType(Key: Typ): TVarType;
-    procedure SaveTo(Stream: TStream; const Ident: Boolean = false); overload; virtual; abstract;
-    procedure SaveTo(AFile: String; const Ident: Boolean = false); overload; virtual; abstract;
+    procedure SaveTo(Stream: TStream; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload; virtual; abstract;
+    procedure SaveTo(AFile: String; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload; virtual; abstract;
     function AsJSON(const Ident: Boolean = False; const UniversalTime: Boolean = False): String; inline;
     property Self: T read GetSelf;
     property DataType: TDataType read GetDataType;
@@ -349,8 +349,8 @@ type
     class function ParseStream(Stream: TStream): TSuperObject;
     class function ParseFile(FileName: String): TSuperObject;
 
-    procedure SaveTo(Stream: TStream; const Ident: Boolean = false); overload; override;
-    procedure SaveTo(AFile: String; const Ident: Boolean = false); overload; override;
+    procedure SaveTo(Stream: TStream; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload; override;
+    procedure SaveTo(AFile: String; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload; override;
     procedure Remove(Key: String);
 
     property Expression[const Code: String]: ISuperExpression read GetExpr; default;
@@ -400,8 +400,8 @@ type
     procedure Clear;
     property Length: Integer read GetLength;
     function GetEnumerator: TSuperEnumerator<IJSONAncestor>;
-    procedure SaveTo(Stream: TStream; const Ident: Boolean = false); overload; override;
-    procedure SaveTo(AFile: String; const Ident: Boolean = false); overload; override;
+    procedure SaveTo(Stream: TStream; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload; override;
+    procedure SaveTo(AFile: String; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload; override;
     function Clone: ISuperArray;
     function AsArray: ISuperArray; override;
     function Where(const Cond: TCondCallBack<IMember>): ISuperArray;
@@ -1116,23 +1116,23 @@ begin
   FJSONObj.Remove(Key);
 end;
 
-procedure TSuperObject.SaveTo(Stream: TStream; const Ident: Boolean);
+procedure TSuperObject.SaveTo(Stream: TStream; const Ident, UniversalTime: Boolean);
 var
   S: TStringStream;
 begin
-  S := TStringStream.Create( AsJSON(Ident) );
+  S := TStringStream.Create( AsJSON(Ident, UniversalTime) );
   try
-     S.SaveToStream(S);
+     S.SaveToStream(Stream);
   finally
      S.Free;
   end;
 end;
 
-procedure TSuperObject.SaveTo(AFile: String; const Ident: Boolean);
+procedure TSuperObject.SaveTo(AFile: String; const Ident, UniversalTime: Boolean);
 var
   S: TStringStream;
 begin
-  S := TStringStream.Create( AsJSON(Ident) );
+  S := TStringStream.Create( AsJSON(Ident, UniversalTime) );
   try
      S.SaveToFile(AFile);
   finally
@@ -1312,11 +1312,11 @@ begin
   Result := TJSONArray(FJSONObj).Count;
 end;
 
-procedure TSuperArray.SaveTo(Stream: TStream; const Ident: Boolean);
+procedure TSuperArray.SaveTo(Stream: TStream; const Ident, UniversalTime: Boolean);
 var
   S: TStringStream;
 begin
-  S := TStringStream.Create( AsJSON(Ident) );
+  S := TStringStream.Create( AsJSON(Ident, UniversalTime) );
   try
      S.SaveToStream(S);
   finally
@@ -1324,11 +1324,11 @@ begin
   end;
 end;
 
-procedure TSuperArray.SaveTo(AFile: String; const Ident: Boolean);
+procedure TSuperArray.SaveTo(AFile: String; const Ident, UniversalTime: Boolean);
 var
   S: TStringStream;
 begin
-  S := TStringStream.Create( AsJSON(Ident) );
+  S := TStringStream.Create( AsJSON(Ident, UniversalTime) );
   try
      S.SaveToFile(AFile);
   finally
