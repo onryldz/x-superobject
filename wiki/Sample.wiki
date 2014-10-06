@@ -343,6 +343,8 @@ type
      Unt: Integer;
     [REVAL('', '*')]
      Filter: String;
+    [DISABLE]
+     BlaBlaBla: String;
   end;
 
   var X: Test;
@@ -351,6 +353,7 @@ type
     X.Typ := 'XType';
     X.Unt := 2;
     X.Filter := '';
+    X.BlaBlaBla := ':)';
     ShowMessage(X.AsJSON);
   end;
 }}}
