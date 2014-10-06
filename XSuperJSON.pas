@@ -2108,10 +2108,15 @@ begin
      Exit;
   end
   else
-  if (Len > 13) and (Length(GetStrData(14)) = 2(*UseTime*)) then
+  if (Len > 13) then (*UseTime*)
   begin
-    FOffset := 13;
-    if not ReadTime then
+    if Length(GetStrData(14)) = 2 then
+       FOffset := 13
+    else
+    if Length(GetStrData(16)) = 2 then
+       FOffSet := 15;
+
+    if (FOffset > 1) and (not ReadTime) then
     begin
        FSuccess := False;
        Exit;
