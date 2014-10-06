@@ -596,6 +596,7 @@ var
   var
     Tmp: PWideChar;
   begin
+    if Str = #0 then Exit(ChrToUtf16(0));
     Result := '';
     if Str = '' then
        Exit
