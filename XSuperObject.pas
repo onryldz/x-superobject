@@ -1427,6 +1427,8 @@ var
 begin
   for Prop in aType.GetProperties do
   begin
+    if Prop.Visibility in [mvPrivate, mvProtected] then Continue;
+
     MemberName := Prop.Name;
     Attributes := Prop.GetAttributes;
     // * Read Disable
@@ -1448,6 +1450,8 @@ begin
 
   for Field in aType.GetFields do
   begin
+    if Field.Visibility in [mvPrivate, mvProtected] then Continue;
+
     MemberName := Field.Name;
     Attributes := Field.GetAttributes;
     // * Read Disable
