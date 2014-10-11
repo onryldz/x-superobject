@@ -20,7 +20,7 @@ unit XSuperJSON;
 interface
 
 uses
-  SysUtils, Classes, Generics.Collections, Math, DateUtils, RegularExpressions, RTTI;
+  SysUtils, Classes, Generics.Collections, Generics.Defaults, Math, DateUtils, RegularExpressions, RTTI;
 
 
 const
@@ -46,7 +46,7 @@ type
   end;
 
   TDataType = (dtNil, dtNull, dtObject, dtArray, dtString, dtInteger, dtFloat, dtBoolean, dtDateTime, dtDate, dtTime);
-
+  TJSONComparison<T> = reference to function(const Left, Right: T): Integer;
   // ## Exception
 
   TJSONSyntaxError = class(Exception)
@@ -261,7 +261,9 @@ type
     procedure Remove(const Name: String); overload;
     procedure Remove(const Index: Integer); overload;
     function GetEnumerator: TJSONEnumerator<IJSONPair>;
+    function Sort(Comparison: TJSONComparison<IJSONPair>): Integer;
   end;
+
 
   TJSONObject = class(TJSONValue<IJSONPair>, IJSONObject)
   private
@@ -282,6 +284,7 @@ type
     procedure Remove(const Name: String); overload;
     procedure Remove(const Index: Integer); overload;
     function GetEnumerator: TJSONEnumerator<IJSONPair>;
+    function Sort(Comparison: TJSONComparison<IJSONPair>): Integer;
     class function ParseJSONValue(const Str: String; const CheckDate: Boolean): IJSONAncestor;
   end;
 
@@ -295,6 +298,7 @@ type
     function Get(const I: Integer): IJSONAncestor;
     procedure SetIndex(const Int: Integer; const Value: IJSONAncestor);
     function GetEnumerator: TJSONEnumerator<IJSONAncestor>;
+    function Sort(Comparison: TJSONComparison<IJSONAncestor>): Integer;
     property Index[const Int: Integer]: IJSONAncestor read Get write SetIndex; default;
   end;
 
@@ -316,6 +320,7 @@ type
     function Count: Integer;
     function Get(const I: Integer): IJSONAncestor;
     function GetEnumerator: TJSONEnumerator<IJSONAncestor>;
+    function Sort(Comparison: TJSONComparison<IJSONAncestor>): Integer;
     property Index[const Int: Integer]: IJSONAncestor read Get write SetIndex; default;
   end;
 
@@ -1562,6 +1567,13 @@ begin
      FPairList.Delete(Index);
 end;
 
+function TJSONObject.Sort(Comparison: TJSONComparison<IJSONPair>): Integer;
+begin
+  FPairList.Sort( TComparer<IJSONPair>.Construct(
+    TComparison<IJSONPair>(Comparison)
+  ));
+end;
+
 procedure TJSONObject.Remove(const Name: String);
 var
   R: IJSONPair;
@@ -1710,6 +1722,13 @@ begin
   if (FList.Count = 0) or (Flist.Count <= Int) then
       Exit;
   FList[Int] := Value;
+end;
+
+function TJSONArray.Sort(Comparison: TJSONComparison<IJSONAncestor>): Integer;
+begin
+  FList.Sort( TComparer<IJSONAncestor>.Construct(
+    TComparison<IJSONAncestor>(Comparison)
+  ));
 end;
 
 { TJSONValue<T> }
