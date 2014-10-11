@@ -36,6 +36,8 @@ type
 
   ISuperObject = interface;
   ISuperArray = interface;
+  ICast = Interface;
+  IMember = ICast;
   TSuperObject = class;
 
   TMemberStatus = (jUnAssigned, jNull, jAssigned);
@@ -118,6 +120,7 @@ type
     property Ancestor[V: Typ]: IJSONAncestor read GetAncestor;
     function Contains(Key: Typ): Boolean;
     function GetType(Key: Typ): TVarType;
+    procedure Sort(Comparison: TJSONComparison<IMember>);
     procedure SaveTo(Stream: TStream; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload;
     procedure SaveTo(AFile: String; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload;
     function AsJSON(const Ident: Boolean = False; const UniversalTime: Boolean = False): String;
@@ -188,6 +191,7 @@ type
     property Ancestor[V: Typ]: IJSONAncestor read GetAncestor;
     function Contains(Key: Typ): Boolean;
     function GetType(Key: Typ): TVarType;
+    procedure Sort(Comparison: TJSONComparison<IMember>); virtual; abstract;
     procedure SaveTo(Stream: TStream; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload; virtual; abstract;
     procedure SaveTo(AFile: String; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload; virtual; abstract;
     function AsJSON(const Ident: Boolean = False; const UniversalTime: Boolean = False): String; inline;
@@ -278,7 +282,7 @@ type
     function ToString(const Ident: Boolean = False; const UniversalTime: Boolean = False): String; reintroduce;
   end;
 
-  IMember = ICast;
+
 
   ISuperExpression = interface(ICast)
   ['{58366F15-0D83-4BC5-85D5-238E78E73247}']
@@ -365,6 +369,7 @@ type
     function Clone: ISuperObject;
     function AsObject: ISuperObject; override;
     function AsArray: ISuperArray; override;
+    procedure Sort(Comparison: TJSONComparison<IMember>); override;
     function Where(const Cond: TCondCallBack<IMember>): ISuperObject;
     function Delete(const Cond: TCondCallBack<IMember>): ISuperObject;
   end;
@@ -402,6 +407,7 @@ type
     function GetEnumerator: TSuperEnumerator<IJSONAncestor>;
     procedure SaveTo(Stream: TStream; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload; override;
     procedure SaveTo(AFile: String; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload; override;
+    procedure Sort(Comparison: TJSONComparison<IMember>); override;
     function Clone: ISuperArray;
     function AsArray: ISuperArray; override;
     function Where(const Cond: TCondCallBack<IMember>): ISuperArray;
@@ -1191,6 +1197,15 @@ begin
   end;
 end;
 
+procedure TSuperObject.Sort(Comparison: TJSONComparison<IMember>);
+begin
+  if not Assigned(Comparison) then Exit;
+  FJSONObj.Sort(function(const Left, Right: IJSONPair): Integer
+  begin
+    Result := Comparison(TCast.Create(Left), TCast.Create(Right));
+  end);
+end;
+
 function TSuperObject.T: TSuperObject;
 begin
   Result := Self;
@@ -1356,6 +1371,15 @@ begin
        else
           Member<TJSONNull, Boolean>(V, True);
   end;
+end;
+
+procedure TSuperArray.Sort(Comparison: TJSONComparison<IMember>);
+begin
+  if not Assigned(Comparison) then Exit;
+  FJSONObj.Sort(function(const Left, Right: IJSONAncestor): Integer
+  begin
+     Result := Comparison(TCast.Create(Left), TCast.Create(Right));
+  end);
 end;
 
 function TSuperArray.Where(const Cond: TCondCallBack<IMember>): ISuperArray;
