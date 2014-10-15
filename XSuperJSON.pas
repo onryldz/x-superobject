@@ -2082,9 +2082,9 @@ var
   Matches: TMatchCollection;
 begin
   FillChar(Self, SizeOf(TISO8601), #0);
-  Matches := TRegEx.Matches(Value, '(?=\d{4})((\d{4})-(\d{2})-(\d{2}))?(T(\d{2})\:(\d{2})\:'+
-                                   '(\d{2})(Z)?(.(\d{1,3})(Z)?)?([+-](\d{2})\:(\d{2}))?)?|(\d{2})\:'+
-                                   '(\d{2})\:(\d{2})(.(\d{1,3}))?([+-](\d{2})\:(\d{2}))?');
+  Matches := TRegEx.Matches(Value,  '(?=\d{4})((\d{4})-(\d{2})-(\d{2}))?(T(\d{2})\:(\d{2})\:('+
+                                    '\d{2})(Z)?(\.(\d{1,3})(Z)?)?([+-](\d{2})\:(\d{2}))?)?|(\d{2})\:('+
+                                    '\d{2})\:(\d{2})(Z)?(\.(\d{1,3}))?([+-](\d{2})\:(\d{2}))?');
   if Matches.Count <> 1 then Exit;
   FData := Matches.Item[0];
   FSuccess := Trim(FData.Value) = Trim(Value);
@@ -2122,32 +2122,15 @@ var
 begin
   FOffset := 1;
   Len := FData.Groups.Count - 1;
-  if (Length(GetStrData(2)) = 4 (*UseDate*)) and not ReadDate then
-  begin
-     FSuccess := False;
-     Exit;
-  end
-  else
-  if (Len > 13) then (*UseTime*)
-  begin
-    if Length(GetStrData(14)) = 2 then
-       FOffset := 13
-    else
-    if Length(GetStrData(16)) = 2 then
-       FOffSet := 15;
-
-    if (FOffset > 1) and (not ReadTime) then
-    begin
-       FSuccess := False;
-       Exit;
-    end;
-  end;
-
   while FOffset <= Len do
   begin
     Grp := FData.Groups.Item[FOffset];
     with Grp do
-       if Value > '' then
+       if Value > '' then begin
+          if (Value[CharIndex] <> '.') and (System.Length(Value) = 4) then begin
+             Dec(FOffset);
+             ReadDate
+          end else
           case Value[CharIndex] of
             'T', 't': begin
                FUseTime := True;
@@ -2162,6 +2145,7 @@ begin
             '+': if FUseTime then ReadTZ(True);
             '-': if FUseTime then ReadTZ(False);
           end;
+       end;
     Inc(FOffset);
   end;
   if FUseDate and FUseTime then
@@ -2181,10 +2165,7 @@ begin
     Result := False;
  end
  else
- begin
-    FUseDate := True;
-    NextOffset;
- end;
+    FUseDate := True
 end;
 
 procedure TISO8601.ReadMS;
