@@ -492,7 +492,15 @@ type
     class function  ObjectConstructorParamCount(Instance: TClass): Integer;
     class function  ObjectConstructor(Instance: TClass): TObject;
     class function  CheckObject<Typ>(Data: Pointer; Member: TRttiMember; MIdx: Typ; var Obj: TObject): Boolean;
+  end;
 
+  TMemberVisibilities = set of TMemberVisibility;
+  TSerializeParseOptions = class
+  private
+    class var FVisibilities: TMemberVisibilities;
+  public
+    class constructor Create;
+    class property Visibilities: TMemberVisibilities read FVisibilities write FVisibilities;
   end;
 
   TSuperObjectHelper = class helper for TObject
@@ -1451,7 +1459,7 @@ var
 begin
   for Prop in aType.GetProperties do
   begin
-    if Prop.Visibility in [mvPrivate, mvProtected] then Continue;
+    if not (Prop.Visibility in TSerializeParseOptions.Visibilities) then Continue;
 
     MemberName := Prop.Name;
     Attributes := Prop.GetAttributes;
@@ -1474,7 +1482,7 @@ begin
 
   for Field in aType.GetFields do
   begin
-    if Field.Visibility in [mvPrivate, mvProtected] then Continue;
+    if not (Prop.Visibility in TSerializeParseOptions.Visibilities) then Continue;
 
     MemberName := Field.Name;
     Attributes := Field.GetAttributes;
@@ -2058,6 +2066,7 @@ begin
   for Prop in aType.GetProperties do
       if Prop.PropertyType <> Nil then
       begin
+         if not (Prop.Visibility in TSerializeParseOptions.Visibilities) then Continue;
          MemberName := Prop.Name;
          if IsDisabled(Prop.GetAttributes) then
             Continue;
@@ -2067,6 +2076,7 @@ begin
   for Field in aType.GetFields do
       if Field.FieldType <> Nil then
       begin
+         if not (Field.Visibility in TSerializeParseOptions.Visibilities) then Continue;
          MemberName := Field.Name;
          if IsDisabled(Field.GetAttributes) then
             Continue;
@@ -2552,6 +2562,13 @@ constructor REVAL.Create(EQVal, NewVal: Boolean);
 begin
   FEqual := EQVal;
   FValue := NewVal;
+end;
+
+{ TSerializeParseOptions }
+
+class constructor TSerializeParseOptions.Create;
+begin
+  FVisibilities := [mvPublic, mvPublished];
 end;
 
 initialization
