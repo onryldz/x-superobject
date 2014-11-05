@@ -261,7 +261,7 @@ type
     procedure Remove(const Name: String); overload;
     procedure Remove(const Index: Integer); overload;
     function GetEnumerator: TJSONEnumerator<IJSONPair>;
-    function Sort(Comparison: TJSONComparison<IJSONPair>): Integer;
+    procedure Sort(Comparison: TJSONComparison<IJSONPair>);
   end;
 
 
@@ -284,7 +284,7 @@ type
     procedure Remove(const Name: String); overload;
     procedure Remove(const Index: Integer); overload;
     function GetEnumerator: TJSONEnumerator<IJSONPair>;
-    function Sort(Comparison: TJSONComparison<IJSONPair>): Integer;
+    procedure Sort(Comparison: TJSONComparison<IJSONPair>);
     class function ParseJSONValue(const Str: String; const CheckDate: Boolean): IJSONAncestor;
   end;
 
@@ -298,7 +298,7 @@ type
     function Get(const I: Integer): IJSONAncestor;
     procedure SetIndex(const Int: Integer; const Value: IJSONAncestor);
     function GetEnumerator: TJSONEnumerator<IJSONAncestor>;
-    function Sort(Comparison: TJSONComparison<IJSONAncestor>): Integer;
+    procedure Sort(Comparison: TJSONComparison<IJSONAncestor>);
     property Index[const Int: Integer]: IJSONAncestor read Get write SetIndex; default;
   end;
 
@@ -320,7 +320,7 @@ type
     function Count: Integer;
     function Get(const I: Integer): IJSONAncestor;
     function GetEnumerator: TJSONEnumerator<IJSONAncestor>;
-    function Sort(Comparison: TJSONComparison<IJSONAncestor>): Integer;
+    procedure Sort(Comparison: TJSONComparison<IJSONAncestor>);
     property Index[const Int: Integer]: IJSONAncestor read Get write SetIndex; default;
   end;
 
@@ -477,6 +477,8 @@ type
      rString2,
      rInt,
      rDouble,
+     rExp, rExpE,
+     rExpPM,
 
      rEscape,
      rEscapeRoute,
@@ -924,9 +926,14 @@ begin
   rInt := CreateRoute('Int');
   rDouble := CreateRoute('Double');
 
+  rExp := CreateRoute('Exp');
+  rExpE := CreateRoute('ExpE');
+  rExpPM := CreateRoute('ExpPM');
+
   rEscape := CreateRoute('Escape');
   rEscapeRoute := CreateRoute('EscapeRoute');
   rEscapeUChar := CreateRoute('EscapeUChar');
+
 
   rEscape.Add( ['\'], TJumpTrigger.Create(rEscapeRoute, [], ppNil ));
 
@@ -959,12 +966,25 @@ begin
 
   rInt.Add(optNumeric, TUseRouteTrigger.Create(rInt, [], ppNil));
   rInt.Add(['.'], TUseRouteTrigger.Create(rDouble, [], ppNil));
+  rInt.Add(['e', 'E'], TUseRouteTrigger.Create(rExp, [], ppNil));
   rInt.Add(optStop, TJumpTrigger.Create(rFirst, [ttEnd, ttBack], ppInteger));
   rInt.NoRoute(TErrorTrigger.Create(ERR_UnexpectedTokenILLEGAL));
 
   rDouble.Add(optNumeric, TUseRouteTrigger.Create(rDouble, [], ppNil));
+  rDouble.Add(['e', 'E'], TUseRouteTrigger.Create(rExp, [], ppNil));
   rDouble.Add(optStop, TJumpTrigger.Create(rFirst, [ttEnd, ttBack], ppDouble));
   rDouble.NoRoute(TErrorTrigger.Create(ERR_UnexpectedTokenILLEGAL));
+
+  rExp.Add(['+', '-'], TUseRouteTrigger.Create(rExpPM, [], ppNil));
+  rExp.Add(optNumeric, TUseRouteTrigger.Create(rExpE, [], ppNil));
+  rExp.NoRoute(TErrorTrigger.Create(Err_UnexpectedTokenILLEGAL));
+
+  rExpPM.Add(optNumeric, TUseRouteTrigger.Create(rExpE, [], ppNil));
+  rExpPM.NoRoute(TErrorTrigger.Create(Err_UnexpectedTokenILLEGAL));
+
+  rExpE.Add(optNumeric, TUseRouteTrigger.Create(rExpE, [], ppNil));
+  rExpE.Add(optStop, TJumpTrigger.Create(rFirst, [ttEnd, ttBack], ppDouble));
+  rExpE.NoRoute(TErrorTrigger.Create(Err_UnexpectedTokenILLEGAL));
 
 end;
 
@@ -976,6 +996,9 @@ begin
   rString2.Free;
   rInt.Free;
   rDouble.Free;
+  rExp.Free;
+  rExpE.Free;
+  rExpPM.Free;
   rEscape.Free;
   rEscapeRoute.Free;
   rEscapeUChar.Free;
@@ -1567,7 +1590,7 @@ begin
      FPairList.Delete(Index);
 end;
 
-function TJSONObject.Sort(Comparison: TJSONComparison<IJSONPair>): Integer;
+procedure TJSONObject.Sort(Comparison: TJSONComparison<IJSONPair>);
 begin
   FPairList.Sort( TComparer<IJSONPair>.Construct(
     TComparison<IJSONPair>(Comparison)
@@ -1724,7 +1747,7 @@ begin
   FList[Int] := Value;
 end;
 
-function TJSONArray.Sort(Comparison: TJSONComparison<IJSONAncestor>): Integer;
+procedure TJSONArray.Sort(Comparison: TJSONComparison<IJSONAncestor>);
 begin
   FList.Sort( TComparer<IJSONAncestor>.Construct(
     TComparison<IJSONAncestor>(Comparison)
