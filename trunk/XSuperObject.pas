@@ -1482,7 +1482,7 @@ begin
 
   for Field in aType.GetFields do
   begin
-    if not (Prop.Visibility in TSerializeParseOptions.Visibilities) then Continue;
+    if not (Field.Visibility in TSerializeParseOptions.Visibilities) then Continue;
 
     MemberName := Field.Name;
     Attributes := Field.GetAttributes;
