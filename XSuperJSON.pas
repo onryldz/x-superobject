@@ -186,7 +186,7 @@ type
   IJSONDateTime = interface(IJSONBaseDate<TDateTime>)['{9441CA2E-B822-4C13-ABF0-15F8026CCE50}']end;
   TJSONDateTime = class(TJSONBaseDate<TDateTime>, IJSONDateTime)
   public
-    constructor Create(const Value: TDateTime; const Format: String = 'yyyy-mm-dd"T"hh:mm:ss.zzz');
+    constructor Create(const Value: TDateTime; const Format: String = 'yyyy-mm-dd"T"hh":"mm":"ss.zzz');
     property Value;
   end;
 
@@ -200,7 +200,7 @@ type
   IJSONTime = interface(IJSONBaseDate<TTime>)['{EEBCD145-B837-4129-A21D-378DF7DA53B2}']end;
   TJSONTime = class(TJSONBaseDate<TTime>, IJSONTime)
   public
-    constructor Create(const Value: TTime; const Format: String = 'hh:mm:ss.zzz');
+    constructor Create(const Value: TTime; const Format: String = 'hh":"mm":"ss.zzz');
     property Value;
   end;
 
