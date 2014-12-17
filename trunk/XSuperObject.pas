@@ -39,6 +39,7 @@ type
   ICast = Interface;
   IMember = ICast;
   TSuperObject = class;
+  TSuperArray = class;
 
   TMemberStatus = (jUnAssigned, jNull, jAssigned);
 
@@ -65,6 +66,12 @@ type
   end;
 
   DISABLE = class(TCustomAttribute)
+  end;
+
+  DISABLEREAD = class(TCustomAttribute)
+  end;
+
+  DISABLEWRITE = class(TCustomAttribute)
   end;
 
   IBase = interface
@@ -330,6 +337,7 @@ type
     function T: TSuperObject;
     function Where(const Cond: TCondCallBack<IMember>): ISuperObject;
     function Delete(const Cond: TCondCallBack<IMember>): ISuperObject;
+    function Cast: ICast;
   end;
 
   TSuperObject = class(TBaseJSON<IJSONObject, String>, ISuperObject)
@@ -372,6 +380,7 @@ type
     procedure Sort(Comparison: TJSONComparison<IMember>); override;
     function Where(const Cond: TCondCallBack<IMember>): ISuperObject;
     function Delete(const Cond: TCondCallBack<IMember>): ISuperObject;
+    function Cast: ICast;
   end;
 
   ISuperArray = interface(IBaseJSON<IJSONArray, Integer>)
@@ -385,6 +394,7 @@ type
     procedure Clear;
     function Clone: ISuperArray;
     function GetEnumerator: TSuperEnumerator<IJSONAncestor>;
+    function T: TSuperArray;
     function Where(const Cond: TCondCallBack<IMember>): ISuperArray;
     function Delete(const Cond: TCondCallBack<IMember>): ISuperArray; overload;
   end;
@@ -411,6 +421,8 @@ type
     function Clone: ISuperArray;
     function AsArray: ISuperArray; override;
     function Where(const Cond: TCondCallBack<IMember>): ISuperArray;
+    function T: TSuperArray; inline;
+    function AsType<T>: T;
   end;
 
   TSuperProperty = class(TRttiProperty)
@@ -451,7 +463,9 @@ type
     class function GetAttribute(AttributeType: TAttributeClass; Attributes: TArray<TCustomAttribute>): TCustomAttribute;
     class procedure GetAliasName(const Attributes: TArray<TCustomAttribute>; var Result: String);
     class function  GetREVAL(const Attributues: TArray<TCustomAttribute>): REVAL;
-    class function  IsDisabled(const Attributes: TArray<TCustomAttribute>): Boolean;
+    class function  IsDisabled(const Attributes: TArray<TCustomAttribute>): Boolean; inline;
+    class function  IsDisabledRead(const Attributes: TArray<TCustomAttribute>): Boolean; inline;
+    class function  IsDisabledWrite(const Attributes: TArray<TCustomAttribute>): Boolean; inline;
   public
     class constructor Create;
     class destructor Destroy;
@@ -461,6 +475,7 @@ type
     class function GetGenericsCreateArgs(Cls: TRttiType): TArray<TValue>;
 
     // ** Read
+    class procedure ReadStream(AStream: TStream; IResult: IJSONAncestor);
     class procedure ReadGeneric(AObject: TObject; IResult: ISuperArray);
     class procedure ReadObject(AObject: TObject; IResult: ISuperObject);
     class procedure ReadRecord(Info: PTypeInfo; ARecord: Pointer; IResult: ISuperObject);
@@ -474,6 +489,7 @@ type
     class procedure ReadVariantOfObject(Val: Variant; const Name: String; IJsonData: ISuperObject);
 
     // ** Write
+    class procedure WriteStream(AStream: TStream; IData: IJSONAncestor);
     class procedure WriteGeneric(AObject: TObject; IData: ISuperArray);
     class procedure WriteObject(AObject: TObject; IData: ISuperObject);
     class procedure WriteRecord(Info: PTypeInfo; ARecord: Pointer; IData: ISuperObject);
@@ -492,6 +508,8 @@ type
     class function  ObjectConstructorParamCount(Instance: TClass): Integer;
     class function  ObjectConstructor(Instance: TClass): TObject;
     class function  CheckObject<Typ>(Data: Pointer; Member: TRttiMember; MIdx: Typ; var Obj: TObject): Boolean;
+
+    class property  GenericsCache: TObjectDictionary<TClass, TGenericsInfo> read FGenericsCache;
   end;
 
   TMemberVisibilities = set of TMemberVisibility;
@@ -1031,6 +1049,14 @@ begin
   end;
 end;
 
+function TSuperObject.Cast: ICast;
+begin
+  if Assigned(FCasted) then
+     Result := TCast.Create(FCasted)
+  else
+     Result := TCast.Create(FJSONObj);
+end;
+
 function TSuperObject.Clone: ISuperObject;
 begin
   Result := SO(AsJSON);
@@ -1292,6 +1318,29 @@ begin
   Result := Self;
 end;
 
+function TSuperArray.AsType<T>: T;
+var
+  Ctx: TRttiContext;
+  Typ: TRttiType;
+begin
+  Ctx := TRttiContext.Create;
+  try
+    Typ := Ctx.GetType(TypeInfo(T));
+    if not Assigned(Typ) then
+       Exit;
+    if Typ.IsInstance and TSerializeParse.IsGenerics(Typ) then
+    begin
+      Result := TValue.From<TObject>(TSerializeParse.ObjectConstructor(Typ.AsInstance.MetaclassType)).AsType<T>;
+      TSerializeParse.WriteGeneric(TValue.From<T>(Result).AsObject, Self);
+    end
+    else
+      raise SOException.Create('Unsupported type.');
+  except
+    Ctx.Free;
+    raise;
+  end;
+end;
+
 procedure TSuperArray.Add(Value: IJSONAncestor);
 begin
   TJSONArray(FJSONObj).Add(Value);
@@ -1390,6 +1439,11 @@ begin
   end);
 end;
 
+function TSuperArray.T: TSuperArray;
+begin
+  Result := Self;
+end;
+
 function TSuperArray.Where(const Cond: TCondCallBack<IMember>): ISuperArray;
 var
   Member: IJSONAncestor;
@@ -1459,12 +1513,13 @@ var
 begin
   for Prop in aType.GetProperties do
   begin
-    if not (Prop.Visibility in TSerializeParseOptions.Visibilities) then Continue;
+    if (not (Prop.Visibility in TSerializeParseOptions.Visibilities))
+       {$IFDEF AUTOREFCOUNT} or (Prop.Parent.AsInstance.MetaclassType = TObject){$ENDIF} then Continue;
 
     MemberName := Prop.Name;
     Attributes := Prop.GetAttributes;
     // * Read Disable
-    if IsDisabled(Attributes) then
+    if IsDisabled(Attributes) or IsDisabledWrite(Attributes) then
        Continue;
 
     // * Read Alias Name
@@ -1487,7 +1542,7 @@ begin
     MemberName := Field.Name;
     Attributes := Field.GetAttributes;
     // * Read Disable
-    if IsDisabled(Attributes) then
+    if IsDisabled(Attributes) or IsDisabledWrite(Attributes) then
        Continue;
 
     // * Read Alias Name
@@ -1627,7 +1682,16 @@ var
 begin
   SetLength(Result, 0);
   if FGenericsCache.TryGetValue(Cls.AsInstance.MetaclassType, Info) then
-     Result := Info.CreateArgs;
+     Result := Info.CreateArgs
+  else
+  if Cls.AsInstance.MetaclassType.InheritsFrom(TStringStream) then
+  begin
+     SetLength(Result, 3);
+     Result[0] := TValue.From<String>('');
+     Result[1] := TValue.From<TEncoding>(TEncoding.UTF8);
+     Result[2] := TValue.From<Boolean>(True)
+  end;
+
 end;
 
 class function TSerializeParse.GetGenericType(Cls: TClass): TGenericsType;
@@ -1693,6 +1757,16 @@ begin
   Result := GetAttribute(DISABLE, Attributes) <> Nil;
 end;
 
+class function TSerializeParse.IsDisabledRead(const Attributes: TArray<TCustomAttribute>): Boolean;
+begin
+  Result := GetAttribute(DISABLEREAD, Attributes) <> Nil;
+end;
+
+class function TSerializeParse.IsDisabledWrite(const Attributes: TArray<TCustomAttribute>): Boolean;
+begin
+  Result := GetAttribute(DISABLEWRITE, Attributes) <> Nil;
+end;
+
 class function TSerializeParse.IsGenerics(Cls: TClass): Boolean;
 var
   Info: TGenericsInfo;
@@ -1730,7 +1804,7 @@ begin
         end
      end;
   end;
-  FGenericsCache.Add(C, TGenericsInfo.Create(Nil, False, Nil));
+  //FGenericsCache.Add(C, TGenericsInfo.Create(Nil, False, Nil));
 end;
 
 class function TSerializeParse.ObjectConstructor(
@@ -1738,11 +1812,33 @@ class function TSerializeParse.ObjectConstructor(
 var
   Ctx: TRttiContext;
   Typ: TRttiType;
+  Mtd: TRttiMethod;
+  function InEncoding(List: TArray<TRttiParameter>): Boolean;
+  var
+    I: Integer;
+  begin
+     if Length(List) <> 3 then Exit;
+     for I := 0 to High(List) do
+         if (List[I].ParamType.TypeKind = tkClass) and (List[I].ParamType.AsInstance.MetaclassType.InheritsFrom(TEncoding)) then
+             Exit(True);
+     Result := False;
+  end;
 begin
   Ctx := TRttiContext.Create;
   try
     Typ := Ctx.GetType(Instance);
-    Result := Typ.GetMethod('Create').Invoke(Instance, GetGenericsCreateArgs(Typ)).AsObject;
+    {$IFNDEF Android or IOS}
+      if Instance.InheritsFrom(TStringStream) then begin
+        for Mtd in Typ.GetMethods do
+           if (CompareText(Mtd.Name, 'Create') = 0) and InEncoding(Mtd.GetParameters) then
+              Break;
+       Assert(Assigned(Mtd));
+    end
+    else
+    {$ENDIF}
+      Mtd := Typ.GetMethod('Create');
+
+    Result := Mtd.Invoke(Instance, GetGenericsCreateArgs(Typ)).AsObject;
   finally
     Ctx.Free;
   end;
@@ -1782,7 +1878,7 @@ begin
   begin
     Item := Info.Item(AObject, I);
     if Item <> Nil then
-       ReadObject(Item, IResult.O[I]) 
+       ReadObject(Item, IResult.O[I])
   end;
 end;
 
@@ -1790,6 +1886,7 @@ class procedure TSerializeParse.ReadMember<T, Typ>(Member: Typ; RType: PTypeInfo
 var
   I: Integer;
   SubVal: TValue;
+  Obj: TObject;
 begin
   if RType = TypeInfo(TDateTime) then
      IJSonData.D[Member] := MemberValue.AsType<TDateTime>
@@ -1824,10 +1921,18 @@ begin
 
     tkClass, tkPointer:
        if MemberValue.IsObject and (MemberValue.AsObject <> Nil) then
-          if IsGenerics(MemberValue.AsObject.ClassType) then
-             ReadGeneric(MemberValue.AsObject, IJSonData.A[Member])
+       begin
+          Obj := MemberValue.AsObject;
+          if Obj is TStream then
+          begin
+             IJSONData.S[Member] := '';
+             ReadStream(TStream(Obj), IJSONData.Ancestor[Member])
+          end
+          else if IsGenerics(Obj.ClassType) then
+             ReadGeneric(Obj, IJSonData.A[Member])
           else
-             ReadObject(MemberValue.AsObject, IJSonData.O[Member]);
+             ReadObject(Obj, IJSonData.O[Member]);
+       end;
 
     tkVariant:
        if TypeInfo(Typ) = TypeInfo(String) then
@@ -1868,6 +1973,28 @@ begin
   for I := 0 to SizeOf(Integer) * 8 - 1 do
     if I in S then
        IJsonData.Add(I);
+end;
+
+class procedure TSerializeParse.ReadStream(AStream: TStream; IResult: IJSONAncestor);
+var
+  F: Boolean;
+  Convert: TStringStream;
+begin
+  if AStream is TStringStream then begin
+     F := False;
+     Convert := TStringStream(AStream);
+  end
+  else begin
+     F := True;
+     Convert :=  TStringStream.Create(''{$IFNDEF Android or IOS}, TEncoding.UTF8 {$ENDIF});
+     Convert.LoadFromStream(AStream);
+  end;
+  try
+    (IResult as TJSONString).Value := Convert.DataString;
+  finally
+    if F then
+       Convert.Free;
+  end;
 end;
 
 class procedure TSerializeParse.ReadTValueOfArray(Val: TValue;
@@ -1995,7 +2122,10 @@ begin
     tkClass:
        begin
           if CheckObject<Typ>(Data, MemberValue, Member, Obj) then
-             if IsGenerics(Obj.ClassType) then
+             if (Obj is TStream) then begin
+                if IJSONData.Null[Member] = jAssigned then
+                   WriteStream(TStream(Obj), IJSonData.Ancestor[Member])
+             end else if IsGenerics(Obj.ClassType) then
                 WriteGeneric(Obj, IJSONData.A[Member])
              else
                 WriteObject(Obj, IJSonData.O[Member]);
@@ -2068,7 +2198,7 @@ begin
       begin
          if not (Prop.Visibility in TSerializeParseOptions.Visibilities) then Continue;
          MemberName := Prop.Name;
-         if IsDisabled(Prop.GetAttributes) then
+         if IsDisabled(Prop.GetAttributes) or IsDisabledRead(Prop.GetAttributes) then
             Continue;
          GetAliasName(Prop.GetAttributes, MemberName);
          WriteMember<IJSONObject, String>(Data, MemberName, Prop.PropertyType.Handle, TSuperProperty(Prop), IJSonData);
@@ -2078,7 +2208,7 @@ begin
       begin
          if not (Field.Visibility in TSerializeParseOptions.Visibilities) then Continue;
          MemberName := Field.Name;
-         if IsDisabled(Field.GetAttributes) then
+         if IsDisabled(Field.GetAttributes) or IsDisabledRead(Field.GetAttributes) then
             Continue;
          GetAliasName(Field.GetAttributes, MemberName);
          WriteMember<IJSONObject, String>(Data, MemberName, Field.FieldType.Handle, TSuperField(Field), IJSonData);
@@ -2136,6 +2266,18 @@ begin
       Include(Sets, IJSONData.I[I]);
   TValue.Make(Integer(Sets), GetMemberTypeInfo(Member), Val);
   SetValue<String>(Data, Member, '', Val);
+end;
+
+class procedure TSerializeParse.WriteStream(AStream: TStream; IData: IJSONAncestor);
+var
+  Setter: TStringStream;
+begin
+  Setter := TStringStream.Create((IData as TJSONString).Value {$IFNDEF Android or IOS}, TEncoding.UTF8 {$ENDIF});
+  try
+    AStream.CopyFrom(Setter, Setter.Size);
+  finally
+    Setter.Free;
+  end;
 end;
 
 { TSuperRecord<T> }
