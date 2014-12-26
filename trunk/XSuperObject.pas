@@ -148,7 +148,7 @@ type
     FCasted: IJSONAncestor;
     FInterface: IInterface;
     FCheckDate: Boolean;
-    function ContainsEx(Key: Typ; Value: IJSONAncestor): Boolean;
+    function ContainsEx(Key: Typ; out Value: IJSONAncestor): Boolean;
     function  DefaultValueClass<TT: Class>(const Value): TT;
     procedure Member<MT: Class; TValue>(const Name: Typ; const Value: TValue); overload;
     function  Member(const Name: Typ): Boolean; overload;
@@ -674,7 +674,7 @@ begin
   Result := GetData(Key) <> Nil;
 end;
 
-function TBaseJSON<T, Typ>.ContainsEx(Key: Typ; Value: IJSONAncestor): Boolean;
+function TBaseJSON<T, Typ>.ContainsEx(Key: Typ; out Value: IJSONAncestor): Boolean;
 begin
   Value := GetData(Key);
   Result := Value <> Nil;
@@ -2145,19 +2145,22 @@ begin
 
     tkDynArray:
       begin
-        SetArrayRawData(MemberValue, Data);
-        J := IJSonData.A[Member].Length;
-        SubVal := GetValue<Typ>(Data, MemberValue, Member);
-        DynArraySetLength(PPointer(SubVal.GetReferenceToRawData)^, SubVal.TypeInfo, 1, @J);
-        SetValue<String>(Data, MemberValue,'', SubVal );
-        for I := 0 to J-1 do
-            WriteMember<IJSONArray, Integer>
-                       (SubVal.GetReferenceToRawArrayElement(I),
-                        I,
-                        GetMemberTypeInfo(MemberValue),
-                        MemberValue,
-                        IJsonData.A[Member]);
-       ClearArrayRawData(MemberValue);
+        if IJSonData.Null[Member] = jAssigned then
+        begin
+          SetArrayRawData(MemberValue, Data);
+          J := IJSonData.A[Member].Length;
+          SubVal := GetValue<Typ>(Data, MemberValue, Member);
+          DynArraySetLength(PPointer(SubVal.GetReferenceToRawData)^, SubVal.TypeInfo, 1, @J);
+          SetValue<String>(Data, MemberValue,'', SubVal );
+          for I := 0 to J-1 do
+              WriteMember<IJSONArray, Integer>
+                         (SubVal.GetReferenceToRawArrayElement(I),
+                          I,
+                          GetMemberTypeInfo(MemberValue),
+                          MemberValue,
+                          IJsonData.A[Member]);
+          ClearArrayRawData(MemberValue);
+        end;
       end;
 
     tkRecord:
