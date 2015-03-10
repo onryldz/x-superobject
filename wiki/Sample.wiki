@@ -112,7 +112,7 @@ begin
                    '  ] '+
                    '}');
   Memo1.Lines.Add(
-      FilterJSON.A['Table'].Where(function(const Arg: IMember): Boolean 
+      FilterJSON.A['Table'].Where(function(Arg: IMember): Boolean 
       begin
         with Arg.AsObject do
              Result := (S['Sex'] = 'M') and (F['Size'] > 1.60)
@@ -149,7 +149,7 @@ begin
                    '  ] '+
                    '}');
   Memo1.Lines.Add(
-      FilterJSON.A['Table'].Delete(function(const Arg: IMember): Boolean 
+      FilterJSON.A['Table'].Delete(function(Arg: IMember): Boolean 
       begin
         with Arg.AsObject do
              Result := (S['Sex'] = 'M') and (F['Size'] > 1.60)
@@ -170,14 +170,14 @@ var
 begin
   X := SO('{b:1, a:2, d:4, c:2}');
   ShowMessage(X.AsJSON);
-  X.Sort(function(const Left, Right: IMember): Integer begin
+  X.Sort(function(Left, Right: IMember): Integer begin
     Result := CompareText(Left.Name, Right.Name);
   end);
   ShowMessage(X.AsJSON);
 
   A := SA('[{index:3}, {index:4}, {index:2}, {index:1}]');
   ShowMessage(A.AsJSON);
-  A.Sort(function(const Left, Right: IMember): Integer begin
+  A.Sort(function(Left, Right: IMember): Integer begin
     Result := CompareValue(Left.AsObject.I['index'], Right.AsObject.I['index']);
   end);
   ShowMessage(A.AsJSON);
