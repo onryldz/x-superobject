@@ -46,7 +46,7 @@ type
   end;
 
   TDataType = (dtNil, dtNull, dtObject, dtArray, dtString, dtInteger, dtFloat, dtBoolean, dtDateTime, dtDate, dtTime);
-  TJSONComparison<T> = reference to function(const Left, Right: T): Integer;
+  TJSONComparison<T> = reference to function(Left, Right: T): Integer;
   // ## Exception
 
   TJSONSyntaxError = class(Exception)
@@ -1103,6 +1103,8 @@ begin
   lt := Check([ltSValue, ltName, ltDValue, ltIValue, ltTrue, ltFalse]);
   if lt in [ltSValue, ltName, ltTrue, ltFalse] then
   begin
+     if (Pos(#$D, FLexem.Str) > 0) or (Pos(#$A, FLexem.Str)>0) then
+         Exit(False);
      Result := True;
      S := FLexem.Str;
   end
@@ -2140,7 +2142,7 @@ end;
 
 procedure TISO8601.ReadStructure;
 var
-  Len: Integer;
+  Len, VLen: Integer;
   Grp: TGroup;
 begin
   FOffset := 1;
@@ -2150,11 +2152,22 @@ begin
     Grp := FData.Groups.Item[FOffset];
     with Grp do
        if Value > '' then begin
-          if (Value[CharIndex] <> '.') and (System.Length(Value) = 4) then begin
+          VLen := System.Length(Value);
+          if (Value[CharIndex] <> '.') and (VLen = 4) then begin
              Dec(FOffset);
              ReadDate
           end else
           case Value[CharIndex] of
+            '0'..'9': if VLen = 2 then begin
+               FUseTime := True;
+               Dec(FOffset);
+               if not ReadTime then
+               begin
+                  FSuccess := False;
+                  Exit;
+               end;
+            end;
+
             'T', 't': begin
                FUseTime := True;
                if not ReadTime then
