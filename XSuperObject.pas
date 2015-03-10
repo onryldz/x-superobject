@@ -140,7 +140,7 @@ type
     function ValueEx<T>: Variant;
   end;
 
-  TCondCallBack<T> = reference to function(const Arg: T): Boolean;
+  TCondCallBack<T> = reference to function(Arg: T): Boolean;
 
   TBaseJSON<T, Typ> = class(TBase, IBaseJSON<T, Typ>)
   protected
@@ -387,9 +387,11 @@ type
   ['{41A2D578-CFAB-4924-8F15-0D0227F35412}']
     function GetLength: Integer;
     property Length: Integer read GetLength;
+    procedure Add(Value: IJSONAncestor); overload;
+    procedure Add(Value: ISuperArray); overload;
+    procedure Add(Value: ISuperObject); overload;
     procedure Add(Value: Variant; DateFormat: TFormatSettings); overload;
     procedure Add(Value: Variant); overload;
-    procedure Add(Value: IJSONAncestor); overload;
     procedure Delete(Index: Integer); overload;
     procedure Clear;
     function Clone: ISuperArray;
@@ -696,7 +698,7 @@ begin
   if TJSONString.InheritsFrom(TT) then
     Result := TJSONString.Create(String(Value)) as TT
   else if TJSONInteger.InheritsFrom(TT) then
-    Result := TJSONInteger.Create(Integer(Value)) as TT
+    Result := TJSONInteger.Create(Int64(Value)) as TT
   else if TJSONFloat.InheritsFrom(TT) then
     Result := TJSONFloat.Create(Double(Value)) as TT
   else if TJSONBoolean.InheritsFrom(TT) then
@@ -1234,7 +1236,7 @@ end;
 procedure TSuperObject.Sort(Comparison: TJSONComparison<IMember>);
 begin
   if not Assigned(Comparison) then Exit;
-  FJSONObj.Sort(function(const Left, Right: IJSONPair): Integer
+  FJSONObj.Sort(function(Left, Right: IJSONPair): Integer
   begin
     Result := Comparison(TCast.Create(Left), TCast.Create(Right));
   end);
@@ -1298,17 +1300,18 @@ procedure TSuperArray.Add(Value: Variant);
 var
   P: Pointer;
 begin
-  if VarType(Value) = varUnknown  then with IUnknown(Value) do
-  begin
-     if QueryInterface(ISuperObject, P) = S_OK then
-        Add(ISuperObject(P))
-     else
-     if QueryInterface(ISuperArray, P) = S_OK then
-        Add(ISuperArray(P))
-     else
-     if QueryInterface(IJSONAncestor, P) = S_OK then
-        Add(IJSONAncestor(P));
-  end
+  if VarType(Value) = varUnknown  then
+    with IUnknown(Value) do
+    begin
+       if QueryInterface(ISuperObject, P) = S_OK then
+  //        Add(ISuperObject(P))
+       else
+       if QueryInterface(ISuperArray, P) = S_OK then
+  //        Add(ISuperArray(P))
+       else
+       if QueryInterface(IJSONAncestor, P) = S_OK then
+  //        Add(IJSONAncestor(P));
+    end
   else
   Add(Value, FormatSettings);
 end;
@@ -1433,7 +1436,7 @@ end;
 procedure TSuperArray.Sort(Comparison: TJSONComparison<IMember>);
 begin
   if not Assigned(Comparison) then Exit;
-  FJSONObj.Sort(function(const Left, Right: IJSONAncestor): Integer
+  FJSONObj.Sort(function(Left, Right: IJSONAncestor): Integer
   begin
      Result := Comparison(TCast.Create(Left), TCast.Create(Right));
   end);
@@ -1714,14 +1717,20 @@ begin
   begin
      Result := TRttiProperty(Member).PropertyType;
      if GetArray and (TSuperProperty(Member).ArrayRawData <> Nil) then
-        Result := TRttiDynamicArrayType(Result).ElementType;
+        if Result is TRttiArrayType then
+           Result := TRttiArrayType(Result).ElementType
+        else
+           Result := TRttiDynamicArrayType(Result).ElementType;
   end
   else
   if Member is TRttiField then
   begin
      Result := TRttiField(Member).FieldType;
      if GetArray and (TSuperField(Member).ArrayRawData <> Nil) then
-        Result := TRttiDynamicArrayType(Result).ElementType;
+        if Result is TRttiArrayType then
+           Result := TRttiArrayType(Result).ElementType
+        else
+           Result := TRttiDynamicArrayType(Result).ElementType;
   end;
 end;
 {$WARNINGS ON}
@@ -1740,7 +1749,7 @@ end;
 class function TSerializeParse.GetValue<Typ>(Data: Pointer;
   Member: TRttiMember; MIdx: Typ): TValue;
 begin
-  if (TypeInfo(Typ) = TypeInfo(Integer) ) and ( GetMemberTypeInfo(Member, False).Kind = tkDynArray ) then
+  if (TypeInfo(Typ) = TypeInfo(Integer) ) and ( GetMemberTypeInfo(Member, False).Kind in [tkDynArray, tkArray] ) then
       Result := GetValue<String>(GetArrayRawData(Member), Member, '')
                         .GetArrayElement(PInteger(@MIdx)^)
   else
@@ -2029,10 +2038,16 @@ end;
 class procedure TSerializeParse.SetValue<Typ>(Data: Pointer; Member: TRttiMember; MIdx: Typ; Val: TValue);
 var
   RVal: REVAL;
+Label
+  Jump;
 begin
-  if (TypeInfo(Typ) = TypeInfo(Integer) ) and ( GetMemberTypeInfo(Member, False).Kind = tkDynArray ) then
-      GetValue<String>(GetArrayRawData(Member), Member, '').SetArrayElement(PInteger(@MIdx)^, Val)
-  else
+  if (TypeInfo(Typ) = TypeInfo(Integer) ) then
+      case GetMemberTypeInfo(Member, False).Kind of
+         tkArray: Val.ExtractRawData(Data);
+         tkDynArray: GetValue<String>(GetArrayRawData(Member), Member, '').SetArrayElement(PInteger(@MIdx)^, Val)
+         else goto Jump;
+      end
+  else Jump:
   if Member is TRttiProperty  then
   begin
      RVal := GetREVAL(TRttiProperty(Member).GetAttributes);
@@ -2141,7 +2156,24 @@ begin
          end;
        end;
 
-    tkArray: raise SOException.Create('There is no support for static array.');
+    tkArray:
+      begin
+        SetArrayRawData(MemberValue, Data);
+        J := IJSONData.A[Member].Length;
+        SubVal := GetValue<Typ>(Data, MemberValue, Member);
+        if SubVal.GetArrayLength < J then
+           J := SubVal.GetArrayLength;
+
+        for I := 0 to J-1 do
+              WriteMember<IJSONArray, Integer>
+                         (SubVal.GetReferenceToRawArrayElement(I),
+                          I,
+                          GetMemberTypeInfo(MemberValue),
+                          MemberValue,
+                          IJsonData.A[Member]);
+        SetValue<String>(Data, MemberValue,'', SubVal );
+        ClearArrayRawData(MemberValue);
+      end;
 
     tkDynArray:
       begin
