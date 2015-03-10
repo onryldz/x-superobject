@@ -1297,22 +1297,7 @@ begin
 end;
 
 procedure TSuperArray.Add(Value: Variant);
-var
-  P: Pointer;
 begin
-  if VarType(Value) = varUnknown  then
-    with IUnknown(Value) do
-    begin
-       if QueryInterface(ISuperObject, P) = S_OK then
-  //        Add(ISuperObject(P))
-       else
-       if QueryInterface(ISuperArray, P) = S_OK then
-  //        Add(ISuperArray(P))
-       else
-       if QueryInterface(IJSONAncestor, P) = S_OK then
-  //        Add(IJSONAncestor(P));
-    end
-  else
   Add(Value, FormatSettings);
 end;
 
