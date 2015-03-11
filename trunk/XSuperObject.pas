@@ -27,7 +27,9 @@ uses
   XSuperJSON,
   RTTI,
   TypInfo,
-  Generics.Collections;
+  Generics.Collections,
+  IdGlobal,
+  IdCoderMIME;
 
 type
 
@@ -1764,11 +1766,23 @@ end;
 class function TSerializeParse.IsGenerics(Cls: TClass): Boolean;
 var
   Info: TGenericsInfo;
+  ctx: TRttiContext;
+  typ: TRttiType;
 begin
   if FGenericsCache.TryGetValue(Cls, Info) then
      Result := Info.IsGeneric
   else
+  begin
      Result := False;
+     ctx := TRttiContext.Create;
+     try
+        typ := ctx.GetType(Cls);
+        if typ <> Nil then
+           Result := IsGenerics(typ)
+     finally
+       ctx.Free;
+     end;
+  end;
 end;
 
 class function TSerializeParse.IsGenerics(Cls: TRttiType): Boolean;
@@ -1811,7 +1825,7 @@ var
   var
     I: Integer;
   begin
-     if Length(List) <> 3 then Exit;
+     if Length(List) <> 3 then Exit(False);
      for I := 0 to High(List) do
          if (List[I].ParamType.TypeKind = tkClass) and (List[I].ParamType.AsInstance.MetaclassType.InheritsFrom(TEncoding)) then
              Exit(True);
@@ -1821,6 +1835,7 @@ begin
   Ctx := TRttiContext.Create;
   try
     Typ := Ctx.GetType(Instance);
+    Mtd := nil;
     {$IFNDEF Android or IOS}
       if Instance.InheritsFrom(TStringStream) then begin
         for Mtd in Typ.GetMethods do
@@ -1969,26 +1984,27 @@ begin
        IJsonData.Add(I);
 end;
 
+function Base64Encode(const Bytes: TIdBytes): String;
+var
+  Encoder: TIdEncoderMIME;
+begin
+  Encoder := TIdEncoderMIME.Create(nil);
+  try
+    Result := Encoder.EncodeBytes(Bytes)
+  finally
+    Encoder.Free;
+  end;
+end;
+
 class procedure TSerializeParse.ReadStream(AStream: TStream; IResult: IJSONAncestor);
 var
   F: Boolean;
-  Convert: TStringStream;
+  ByteArray: TIdBytes;
 begin
-  if AStream is TStringStream then begin
-     F := False;
-     Convert := TStringStream(AStream);
-  end
-  else begin
-     F := True;
-     Convert :=  TStringStream.Create(''{$IFNDEF Android or IOS}, TEncoding.UTF8 {$ENDIF});
-     Convert.LoadFromStream(AStream);
-  end;
-  try
-    (IResult as TJSONString).Value := Convert.DataString;
-  finally
-    if F then
-       Convert.Free;
-  end;
+  SetLength(ByteArray, AStream.Size);
+  AStream.Position := 0;
+  AStream.Read(ByteArray[0], AStream.Size);
+  (IResult as TJSONString).Value := Base64Encode(ByteArray);
 end;
 
 class procedure TSerializeParse.ReadTValueOfArray(Val: TValue;
@@ -2023,31 +2039,36 @@ end;
 class procedure TSerializeParse.SetValue<Typ>(Data: Pointer; Member: TRttiMember; MIdx: Typ; Val: TValue);
 var
   RVal: REVAL;
-Label
-  Jump;
 begin
   if (TypeInfo(Typ) = TypeInfo(Integer) ) then
       case GetMemberTypeInfo(Member, False).Kind of
-         tkArray: Val.ExtractRawData(Data);
-         tkDynArray: GetValue<String>(GetArrayRawData(Member), Member, '').SetArrayElement(PInteger(@MIdx)^, Val)
-         else goto Jump;
-      end
-  else Jump:
-  if Member is TRttiProperty  then
-  begin
-     RVal := GetREVAL(TRttiProperty(Member).GetAttributes);
-     if (RVal <> Nil) and (RVal.CheckEQ(Val)) then
-         Val := TValue.FromVariant(RVal.Value);
-     TRttiProperty(Member).SetValue(Data, Val)
-  end
-  else
-  if Member is TRttiField then
-  begin
-     RVal := GetREVAL(TRttiProperty(Member).GetAttributes);
-     if (RVal <> Nil) and (RVal.CheckEQ(Val)) then
-         Val := TValue.FromVariant(RVal.Value);
-     TRttiField(Member).SetValue(Data, Val);
-  end;
+         tkArray: begin
+             Val.ExtractRawData(Data);
+             Exit;
+         end;
+
+         tkDynArray: begin
+             GetValue<String>(GetArrayRawData(Member), Member, '').SetArrayElement(PInteger(@MIdx)^, Val);
+             Exit;
+         end;
+      end;
+
+    if Member is TRttiProperty  then
+    begin
+       RVal := GetREVAL(TRttiProperty(Member).GetAttributes);
+       if (RVal <> Nil) and (RVal.CheckEQ(Val)) then
+           Val := TValue.FromVariant(RVal.Value);
+       TRttiProperty(Member).SetValue(Data, Val)
+    end
+    else
+    if Member is TRttiField then
+    begin
+       RVal := GetREVAL(TRttiProperty(Member).GetAttributes);
+       if (RVal <> Nil) and (RVal.CheckEQ(Val)) then
+           Val := TValue.FromVariant(RVal.Value);
+       TRttiField(Member).SetValue(Data, Val);
+    end;
+
 end;
 
 class procedure TSerializeParse.WriteGeneric(AObject: TObject; IData: ISuperArray);
@@ -2288,12 +2309,33 @@ begin
   SetValue<String>(Data, Member, '', Val);
 end;
 
+function Base64Decode(const EncodedText: string): TBytesStream;
+var
+  Decoder: TIdDecoderMIME;
+begin
+  Decoder := TIdDecoderMIME.Create(nil);
+  try
+    Result := TBytesStream.Create;
+    try
+      Decoder.DecodeBegin(Result);
+      Decoder.Decode(EncodedText);
+      Decoder.DecodeEnd;
+    except
+      Result.Free;
+      raise;
+    end;
+  finally
+    Decoder.Free;
+  end;
+end;
+
 class procedure TSerializeParse.WriteStream(AStream: TStream; IData: IJSONAncestor);
 var
-  Setter: TStringStream;
+  Setter: TBytesStream;
 begin
-  Setter := TStringStream.Create((IData as TJSONString).Value {$IFNDEF Android or IOS}, TEncoding.UTF8 {$ENDIF});
+  Setter := Base64Decode((IData as TJSONString).Value);
   try
+    Setter.Position := 0;
     AStream.CopyFrom(Setter, Setter.Size);
   finally
     Setter.Free;
@@ -2489,6 +2531,9 @@ function TCast.GetInteger: Int64;
 begin
   if not Assigned(FJSON) then
      Result := 0
+  else
+  if DataType <> dtInteger then
+     Result := StrToIntDef(VarToStr(GetVariant), 0)
   else
      Result := TJSONInteger(FJSON).Value;
 end;
