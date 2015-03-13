@@ -38,7 +38,7 @@
 var
   X: ISuperObject;
 begin
-  X := TSuperObject.Create('{}');
+  X := SO;
   X.S['name'] := 'Onur YILDIZ';
   X.B['vip'] := true;
   with X.A['telephones'] do
