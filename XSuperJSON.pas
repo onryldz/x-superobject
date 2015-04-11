@@ -1681,6 +1681,7 @@ begin
     L := Count - 1;
     for I := 0 to L do
     begin
+       if FList = Nil then Continue;
        FList[I].AsJSONString(Str);
        if I < L then
           Str.AppendVal(',', Str.Ident);

@@ -44,6 +44,7 @@ type
   TSuperArray = class;
 
   TMemberStatus = (jUnAssigned, jNull, jAssigned);
+  TJSONType = (jtObject, jtArray);
 
   Alias = class(TCustomAttribute)
   private
@@ -62,6 +63,10 @@ type
     constructor Create(EQVal: Integer; NewVal: Integer); overload;
     constructor Create(EQVal: Boolean; NewVal: Boolean); overload;
     constructor Create(EQVal: Double; NewVal: Double); overload;
+    constructor Create(EQVal: String); overload;
+    constructor Create(EQVal: Integer); overload;
+    constructor Create(EQVal: Double); overload;
+    constructor Create(EQVal: Boolean); overload;
     function CheckEQ(Val: TValue): Boolean;
     property Equal: Variant read FEqual;
     property Value: Variant read FValue;
@@ -324,9 +329,11 @@ type
     function GetOffset: Integer;
     function GetExpr(const Code: String): ISuperExpression;
 
+    procedure Add(const Key: String; const Data: IJSONAncestor);
     procedure SetData(V: String; Data: Variant); overload;
     procedure SetData(V: String; Data: Variant; AFormatSettings: TFormatSettings); overload;
     procedure Remove(Key: String);
+    function  Check(const Expr: String): Boolean;
 
     property Expression[const Code: String]: ISuperExpression read GetExpr; default;
     property Count: Integer read GetCount;
@@ -357,6 +364,8 @@ type
   public
     procedure First;
     procedure Next;
+
+    procedure Add(const Key: String; const Data: IJSONAncestor);
     procedure SetData(V: String; Data: Variant); overload; inline;
     procedure SetData(V: String; Data: Variant; AFormatSettings: TFormatSettings); overload;
 
@@ -366,6 +375,7 @@ type
     procedure SaveTo(Stream: TStream; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload; override;
     procedure SaveTo(AFile: String; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload; override;
     procedure Remove(Key: String);
+    function  Check(const Expr: String): Boolean;
 
     property Expression[const Code: String]: ISuperExpression read GetExpr; default;
     property Count: Integer read GetCount;
@@ -543,8 +553,10 @@ type
 
   TSuperRecord<T: Record> = class(TBaseSuperRecord<T>);
 
-  function SO(JSON: String = '{}'): ISuperObject;
-  function SA(JSON: String = '[]'): ISuperArray;
+  function SO(JSON: String = '{}'): ISuperObject; overload;
+  function SO(const Args: array of const): ISuperObject; overload;
+  function SA(JSON: String = '[]'): ISuperArray; overload;
+  function SA(const Args: array of const): ISuperArray; overload;
 
   // ** Zero Based Strings Definations...
  {$UNDEF XE2UP}
@@ -567,12 +579,78 @@ var GenericsUnit : String;
 
 function SO(JSON: String): ISuperObject;
 begin
+  if JSON = '' then JSON := '{}';
   Result := TSuperObject.Create(JSON);
+end;
+
+function SO(const Args: array of const): ISuperObject;
+var
+  I: Integer;
+  Members: ISuperArray;
+begin
+  Result := TSuperObject.Create;
+  Members := SA(Args);
+  if not Odd(Members.Length) then
+     Assert(False);
+  for I := 0 to (Members.Length div 2) - 1 do
+      Result.Add(Members.S[I*2], Members.Ancestor[(I*2)+1]);
 end;
 
 function SA(JSON: String): ISuperArray;
 begin
   Result := TSuperArray.Create(JSON);
+end;
+
+function SA(const Args: array of const): ISuperArray;
+var
+  I: Integer;
+  SArray: ISuperArray;
+  SObject: ISuperObject;
+begin
+  Result := TSuperArray.Create;
+  for I := 0 to High(Args) do
+      case PVarRec(@Args[I]).VType of
+          vtInteger : Result.Add(TJSONInteger.Create(PVarRec(@Args[I]).VInteger));
+          vtInt64   : Result.Add(TJSONInteger.Create(PVarRec(@Args[I]).VInt64^));
+          vtBoolean : Result.Add(TJSONBoolean.Create(PVarRec(@Args[I]).VBoolean));
+          vtChar    : Result.Add(TJSONString.Create(PVarRec(@Args[I]).VChar));
+          vtWideChar: Result.Add(TJSONString.Create(PVarRec(@Args[I]).VWideChar));
+          vtExtended: Result.Add(TJSONFloat.Create(PVarRec(@Args[I]).VExtended^));
+          vtCurrency: Result.Add(TJSONFloat.Create(PVarRec(@Args[I]).VCurrency^));
+          vtString  : Result.Add(TJSONString.Create(PVarRec(@Args[I]).VString^));
+          vtPChar   : Result.Add(TJSONString.Create(PVarRec(@Args[I]).VPChar^));
+          vtAnsiString: Result.Add(TJSONString.Create(AnsiString(PVarRec(@Args[I]).VAnsiString)));
+          vtWideString: Result.Add(TJSONString.Create(PWideChar(PVarRec(@Args[I]).VWideString)));
+          vtUnicodeString: Result.Add(TJSONString.Create(String(PVarRec(@Args[I]).VUnicodeString)));
+          vtInterface:
+            if PVarRec(@Args[I]).VInterface = nil then
+               Result.Add(TJSONNull.Create(False))
+            else if IInterface(PVarRec(@Args[I]).VInterface).QueryInterface(ISuperObject, SObject) = 0 then
+                Result.Add(SObject)
+            else if IInterface(PVarRec(@Args[I]).VInterface).QueryInterface(ISuperArray, SArray) = 0 then
+                Result.Add(SArray)
+            else
+                Assert(False);
+          vtPointer :
+            if PVarRec(@Args[I]).VPointer = nil then
+               Result.Add(TJSONNull.Create(False))
+            else
+               Result.Add(TJSONInteger.Create(PtrInt(PVarRec(@Args[I]).VPointer)));
+          vtVariant:
+            Result.Add(PVarRec(@Args[I]).VVariant^);
+          vtObject:
+            if PVarRec(@Args[I]).VPointer = nil then
+               Result.Add(TJSONNull.Create(False))
+            else
+               Result.Add(TJSONInteger.Create(PtrInt(PVarRec(@Args[I]).VPointer)));
+          vtClass:
+            if PVarRec(@Args[I]).VPointer = nil then
+               Result.Add(TJSONNull.Create(False))
+            else
+               Result.Add(TJSONInteger.Create(PtrInt(PVarRec(@Args[I]).VPointer)));
+          else
+            Assert(false);
+      end;
 end;
 
 { TSuperObject }
@@ -1018,14 +1096,21 @@ end;
 function TSuperObject.AsArray: ISuperArray;
 begin
   if not Assigned(FCasted) or not (FCasted is TJSONArray) then
-     Exit(Nil)
-  else
-     Result := TSuperArray.Create(IJSONArray(FCasted));
+     Exit(Nil);
+  Result := TSuperArray.Create(IJSONArray(FCasted));
 end;
 
 function TSuperObject.AsObject: ISuperObject;
 begin
   Result := Self;
+end;
+
+function TSuperObject.Check(const Expr: String): Boolean;
+var
+  IExpr: ISuperExpression;
+begin
+  IExpr :=  TSuperExpression.Create(FJSONObj, Expr);
+  Result := IExpr.DataType <> dtNil;
 end;
 
 function TSuperObject.AsType<T>: T;
@@ -1182,6 +1267,11 @@ begin
   finally
      S.Free;
   end;
+end;
+
+procedure TSuperObject.Add(const Key: String; const Data: IJSONAncestor);
+begin
+  FJSONObj.AddPair(Key, Data);
 end;
 
 procedure TSuperObject.SetData(V: String; Data: Variant; AFormatSettings: TFormatSettings);
@@ -1897,6 +1987,9 @@ var
   SubVal: TValue;
   Obj: TObject;
 begin
+  if MemberValue.IsEmpty then
+     IJSONDATA.Null[Member] := jNull
+  else
   if RType = TypeInfo(TDateTime) then
      IJSonData.D[Member] := MemberValue.AsType<TDateTime>
   else
@@ -2755,7 +2848,7 @@ end;
 
 constructor REVAL.Create(EQVal, NewVal: String);
 begin
-  FEqual := EQVal;
+  FEqual := EQVal;  
   FValue := NewVal;
 end;
 
@@ -2765,10 +2858,34 @@ begin
   FValue := NewVal;
 end;
 
+constructor REVAL.Create(EQVal: String);
+begin
+  FEqual := EQVal;
+  FValue := Variants.Null;
+end;
+
 constructor REVAL.Create(EQVal, NewVal: Boolean);
 begin
   FEqual := EQVal;
   FValue := NewVal;
+end;
+
+constructor REVAL.Create(EQVal: Integer);
+begin
+  FEqual := EQVal;
+  FValue := Variants.Null;
+end;
+
+constructor REVAL.Create(EQVal: Double);
+begin
+  FEqual := EQVal;
+  FValue := Variants.Null;
+end;
+
+constructor REVAL.Create(EQVal: Boolean);
+begin
+  FEqual := EQVal;
+  FValue := Variants.Null;
 end;
 
 { TSerializeParseOptions }
