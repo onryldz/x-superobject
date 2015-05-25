@@ -590,7 +590,7 @@ var
 begin
   Result := TSuperObject.Create;
   Members := SA(Args);
-  if not Odd(Members.Length) then
+  if Odd(Members.Length) then
      Assert(False);
   for I := 0 to (Members.Length div 2) - 1 do
       Result.Add(Members.S[I*2], Members.Ancestor[(I*2)+1]);
@@ -613,13 +613,15 @@ begin
           vtInteger : Result.Add(TJSONInteger.Create(PVarRec(@Args[I]).VInteger));
           vtInt64   : Result.Add(TJSONInteger.Create(PVarRec(@Args[I]).VInt64^));
           vtBoolean : Result.Add(TJSONBoolean.Create(PVarRec(@Args[I]).VBoolean));
+          {$IFNDEF NEXTGEN}
           vtChar    : Result.Add(TJSONString.Create(PVarRec(@Args[I]).VChar));
-          vtWideChar: Result.Add(TJSONString.Create(PVarRec(@Args[I]).VWideChar));
-          vtExtended: Result.Add(TJSONFloat.Create(PVarRec(@Args[I]).VExtended^));
-          vtCurrency: Result.Add(TJSONFloat.Create(PVarRec(@Args[I]).VCurrency^));
           vtString  : Result.Add(TJSONString.Create(PVarRec(@Args[I]).VString^));
           vtPChar   : Result.Add(TJSONString.Create(PVarRec(@Args[I]).VPChar^));
           vtAnsiString: Result.Add(TJSONString.Create(AnsiString(PVarRec(@Args[I]).VAnsiString)));
+          {$ENDIF}
+          vtWideChar: Result.Add(TJSONString.Create(PVarRec(@Args[I]).VWideChar));
+          vtExtended: Result.Add(TJSONFloat.Create(PVarRec(@Args[I]).VExtended^));
+          vtCurrency: Result.Add(TJSONFloat.Create(PVarRec(@Args[I]).VCurrency^));
           vtWideString: Result.Add(TJSONString.Create(PWideChar(PVarRec(@Args[I]).VWideString)));
           vtUnicodeString: Result.Add(TJSONString.Create(String(PVarRec(@Args[I]).VUnicodeString)));
           vtInterface:
