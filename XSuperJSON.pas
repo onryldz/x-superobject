@@ -687,7 +687,9 @@ var
   Res: Extended;
 begin
   Add(#0);
+  {$WARNINGS OFF}
   if not TextToFloat(PWideChar(@Buff[0]), Res, fvExtended, FloatFormat)  then
+  {$WARNINGS ON}
      raise EConvertError.Create('')
   else
      Result := Res;
