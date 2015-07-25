@@ -205,7 +205,7 @@ type
   end;
 
 
-  TJSONDateTimeCheckCallBack = reference to function(const Str: String; var Value: TDateTime; var Typ: TDataType): Boolean;
+  TJSONDateTimeCheckCallBack = reference to function(Str: String; var Value: TDateTime; var Typ: TDataType): Boolean;
   TJSONDateManager = class
   private
     class var FFormats: TList<TJSONDateTimeCheckCallBack>;
@@ -2085,15 +2085,9 @@ begin
 end;
 
 class destructor TJSONDateManager.Destroy;
-var
-  I: Integer;
 begin
   if Assigned(FFormats) then
-  begin
-    for I := 0 to FFormats.Count - 1 do
-        FFormats[I]._Release;
-    FFormats.Free;
-  end;
+     FFormats.Free;
 end;
 
 class function TJSONDateManager.GetFormats: TList<TJSONDateTimeCheckCallBack>;
@@ -2281,7 +2275,7 @@ initialization
   JSONLexGrammar := TJSONGrammar.Create;
 
   TJSONDateManager.Formats.Add( (* ISO-8601 | [Date] + [ Time + [MS] + [UTC] + [Z] ] *)
-     function(const Str: String; var AValue: TDateTime; var Typ: TDataType): Boolean
+     function(Str: String; var AValue: TDateTime; var Typ: TDataType): Boolean
      begin
          with TISO8601.Create(Str) do
          begin

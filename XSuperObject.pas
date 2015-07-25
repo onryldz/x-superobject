@@ -563,7 +563,7 @@ type
  {$IFDEF DCC}
    {$IF CompilerVersion >= 24}
      {$DEFINE XE2UP}
-   {$IFEND}
+   {$ENDIF}
  {$ENDIF}
 
  {$IFDEF XE2UP}
@@ -614,10 +614,10 @@ begin
           vtInt64   : Result.Add(TJSONInteger.Create(PVarRec(@Args[I]).VInt64^));
           vtBoolean : Result.Add(TJSONBoolean.Create(PVarRec(@Args[I]).VBoolean));
           {$IFNDEF NEXTGEN}
-          vtChar    : Result.Add(TJSONString.Create(PVarRec(@Args[I]).VChar));
-          vtString  : Result.Add(TJSONString.Create(PVarRec(@Args[I]).VString^));
-          vtPChar   : Result.Add(TJSONString.Create(PVarRec(@Args[I]).VPChar^));
-          vtAnsiString: Result.Add(TJSONString.Create(AnsiString(PVarRec(@Args[I]).VAnsiString)));
+          vtChar    : Result.Add(TJSONString.Create(PVarRec(@Args[I]).VWideChar));
+          vtString  : Result.Add(TJSONString.Create(String(PVarRec(@Args[I]).VString^)));
+          vtPChar   : Result.Add(TJSONString.Create(Char(PVarRec(@Args[I]).VPChar^)));
+          vtAnsiString: Result.Add(TJSONString.Create(String(PVarRec(@Args[I]).VAnsiString)));
           {$ENDIF}
           vtWideChar: Result.Add(TJSONString.Create(PVarRec(@Args[I]).VWideChar));
           vtExtended: Result.Add(TJSONFloat.Create(PVarRec(@Args[I]).VExtended^));
@@ -2093,7 +2093,6 @@ end;
 
 class procedure TSerializeParse.ReadStream(AStream: TStream; IResult: IJSONAncestor);
 var
-  F: Boolean;
   ByteArray: TIdBytes;
 begin
   SetLength(ByteArray, AStream.Size);
