@@ -5,7 +5,7 @@
 [![](https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=7BPTUUP4DGD5C)
 
 ###Basic
-```
+```json
 {
   "name": "Onur YILDIZ", 
   "vip": true,
@@ -33,7 +33,7 @@
 
 ###Delphi Side
 
-```
+```pascal
 // foo
 var
   X: ISuperObject;
@@ -61,7 +61,7 @@ begin
 ```
 ----------
 ###Super Expressions
-```
+```pascal
 const
   JSON = '{ "o": { '+
          '    "1234567890": {'+
@@ -100,7 +100,7 @@ end;
 ```
 ----------
 ###Where
-```
+```pascal
 var
   FilterJSON: ISuperObject;
 begin
@@ -131,12 +131,25 @@ begin
   );
 end;
 ```
-> **Output**
-> [{"Name":"Sakar SHAKIR","Sex":"M","Size":1.75},{"Name":"Cicek ABBAS","Sex":"M","Size":1.65}]
 
+***Output***
+```json
+ [
+    {
+      "Name":"Sakar SHAKIR",
+      "Sex":"M",
+      "Size":1.75
+    },
+    {
+      "Name":"Cicek ABBAS",
+      "Sex":"M",
+      "Size":1.65
+    }
+ ]
+```
 ----------
 ###Delete
-```
+```pascal
 var
   FilterJSON: ISuperObject;
 begin
@@ -167,12 +180,20 @@ begin
   );
 end;
 ```
-> **Output**
-> [{"Name":"Bulent ERSOY","Sex":"F","Size":1.6}]
+***Output***
+```json
+ [
+    {
+      "Name":"Bulent ERSOY",
+      "Sex":"F",
+      "Size":1.6
+    }
+ ]
+```
 
 ----------
 ###Sorting
-```
+```pascal
 var
   X: ISuperObject;
   A: ISuperArray;
@@ -192,15 +213,16 @@ begin
   ShowMessage(A.AsJSON);
 end;
 ```
-> **Output**
-> {"b":1,"a":2,"d":4,"c":2}
-> {"a":2,"b":1,"c":2,"d":4}
-> [{"index":3},{"index":4},{"index":2},{"index":1}]
-> [{"index":1},{"index":2},{"index":3},{"index":4}]
-
+***Output***
+```json
+ {"b":1,"a":2,"d":4,"c":2}
+ {"a":2,"b":1,"c":2,"d":4}
+ [{"index":3},{"index":4},{"index":2},{"index":1}]
+ [{"index":1},{"index":2},{"index":3},{"index":4}]
+```
 ----------
 ###Variant
-```
+```pascal
 var 
   X: ISuperObject;
 begin 
@@ -214,12 +236,20 @@ begin
   Memo1.Lines.Add(X.AsJSON);
 end;
 ```
-> **Output**
-> {"A":1,"B":"2","C":1.3,"D":false,"E":null,"F":"2014-05-03T03:25:05.059"}
-
+***Output***
+```json
+ {
+    "A": 1,
+    "B": "2",
+    "C": 1.3,
+    "D": false,
+    "E": null,
+    "F": "2014-05-03T03:25:05.059"
+ }
+```
 ----------
 ###Loops
-```
+```pascal
 const
   JSN = '{ '+
         ' "adresses": [ '+
@@ -260,7 +290,7 @@ end;
 > pc = 7160
 
 **Or Enumerator**
-```
+```pascal
 var
   X: ISuperObject;
   AMember,
@@ -283,7 +313,7 @@ begin
 
 ----------
 ###Marshalling
-```
+```pascal
 type
 
   TTestSet = (ttA, ttB, ttC);
@@ -362,7 +392,7 @@ type
 ```
 ----------
 ###Marshalling **Attributes**
-```
+```pascal
 TTest = class 
   public
     [ALIAS('Type')]
@@ -385,6 +415,11 @@ TTest = class
     ShowMessage(X.AsJSON);
   end;
 ```
-> **Output**
-> {"Type": "XType", "Unit": 2, "Filter", "*"}
-
+***Output***
+```json
+ {
+    "Type": "XType", 
+    "Unit": 2, 
+    "Filter": "*"
+ }
+```
