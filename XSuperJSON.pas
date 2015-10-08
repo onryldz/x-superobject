@@ -356,7 +356,7 @@ type
     procedure CreateExcept(const S: String; Args: array of TVarRec); overload;
     procedure CreateExcept(const S: String); overload; inline;
   public
-    constructor Create(const Expression: String; JSON: IJSONAncestor; ExceptionBlock: Boolean = False);
+    constructor Create(const Expression: String; JSON: IJSONAncestor; BlockException: Boolean = False);
     destructor Destroy; override;
     function ReadExpression: IJSONAncestor;
   end;
@@ -1795,12 +1795,12 @@ end;
 { TJSONInterpreter }
 
 constructor TJSONInterpreter.Create(const Expression: String;
-  JSON: IJSONAncestor; ExceptionBlock: Boolean = False);
+  JSON: IJSONAncestor; BlockException: Boolean = False);
 begin
-  LGen := TLexGenerator.Create(JSONLexGrammar, ExceptionBlock);
+  LGen := TLexGenerator.Create(JSONLexGrammar, BlockException);
   LGen.Load(Expression);
   FJSON := JSON;
-  FExceptionBlock := ExceptionBlock;
+  FExceptionBlock := BlockException;
 end;
 
 procedure TJSONInterpreter.CreateExcept(const S: String;

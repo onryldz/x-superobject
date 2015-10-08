@@ -306,7 +306,7 @@ type
   private
     FInterpreter: TJSONInterpreter;
   public
-    constructor Create(Base: IJSONAncestor; const Expr: String);
+    constructor Create(Base: IJSONAncestor; const Expr: String; const BlockException: Boolean = False);
     destructor Destroy; override;
   end;
 
@@ -1111,7 +1111,7 @@ function TSuperObject.Check(const Expr: String): Boolean;
 var
   IExpr: ISuperExpression;
 begin
-  IExpr :=  TSuperExpression.Create(FJSONObj, Expr);
+  IExpr :=  TSuperExpression.Create(FJSONObj, Expr, True);
   Result := IExpr.DataType <> dtNil;
 end;
 
@@ -2507,9 +2507,9 @@ end;
 
 { TSuperExpression }
 
-constructor TSuperExpression.Create(Base: IJSONAncestor; const Expr: String);
+constructor TSuperExpression.Create(Base: IJSONAncestor; const Expr: String; const BlockException: Boolean);
 begin
-  FInterpreter := TJSONInterpreter.Create(Expr, Base);
+  FInterpreter := TJSONInterpreter.Create(Expr, Base, BlockException);
   inherited Create(FInterpreter.ReadExpression);
 end;
 
@@ -2618,7 +2618,10 @@ begin
   if not Assigned(FJSON) then
      Result := 0
   else
-     Result := TJSONFloat(FJSON).Value;
+     if FJSON is TJSONInteger then
+        Result := TJSONInteger(FJSON).Value
+     else
+        Result := TJSONFloat(FJSON).Value;
 end;
 
 function TCast.GetInteger: Int64;
