@@ -1395,7 +1395,7 @@ var
 label
   JMP;
 begin
-  if not FCheckDates then
+  if (not FCheckDates) or (Length(LGen.Current.Str) > 25 {2015-10-20T12:22:24+00:00}) or (Length(LGen.Current.Str) < 5 {22:22}) then
      JMP:Val := TJSONString.Create( LGen.Current.Str )
   else
      if TJSONDateManager.Check(LGen.Current.Str, dT, DVal ) then
