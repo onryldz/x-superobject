@@ -1,5 +1,5 @@
  (*
-  *                       XSuperObject - Simple REST Framework
+  *                       XSuperObject - Simple JSON Framework
   *
   * The MIT License (MIT)
   * Copyright (c) 2015 Onur YILDIZ
