@@ -1,20 +1,31 @@
-(*
-  *                       Cross Super Object Toolkit
+ (*
+  *                       XSuperObject - Simple REST Framework
   *
-  * Usage allowed under the restrictions of the Lesser GNU General Public License
-  * or alternatively the restrictions of the Mozilla Public License 1.1
+  * The MIT License (MIT)
+  * Copyright (c) 2015 Onur YILDIZ
   *
-  * Software distributed under the License is distributed on an "AS IS" basis,
-  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
-  * the specific language governing rights and limitations under the License.
   *
-  * Embarcadero Technologies Inc is not permitted to use or redistribute
-  * this source code without explicit permission.
+  * Permission is hereby granted, free of charge, to any person
+  * obtaining a copy of this software and associated documentation
+  * files (the "Software"), to deal in the Software without restriction,
+  * including without limitation the rights to use, copy, modify,
+  * merge, publish, distribute, sublicense, and/or sell copies of the Software,
+  * and to permit persons to whom the Software is furnished to do so,
+  * subject to the following conditions:
   *
-  * Unit owner : Onur YILDIZ <onryldz10@gmail.com>
-  * Web site   : http://www.caracaldev.org
+  * The above copyright notice and this permission notice shall
+  * be included in all copies or substantial portions of the Software.
   *
-*)
+  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+  * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+  * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+  * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH
+  * THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+  *
+  *)
+
 unit XSuperJSON;
 
 interface
@@ -616,7 +627,7 @@ var
                   #8 : Result := Result + '\b';
                   #9 : Result := Result + '\t';
                   #10: Result := Result + '\n';
-                  #11: Result := Result + '\v';
+                  //#11: Result := Result + '\v';
                   #12: Result := Result + '\f';
                   #13: Result := Result + '\r';
                else
@@ -2087,9 +2098,18 @@ begin
 end;
 
 class destructor TJSONDateManager.Destroy;
+{$IF CompilerVersion < 29}
+var
+  I: Integer;
+{$ENDIF}
 begin
-  if Assigned(FFormats) then
-     FFormats.Free;
+  if Assigned(FFormats) then begin
+    {$IF CompilerVersion < 29}
+    for I := 0 to FFormats.Count - 1 do
+        FFormats.List[I]._Release;
+    {$ENDIF}
+    FFormats.Free;
+  end;
 end;
 
 class function TJSONDateManager.GetFormats: TList<TJSONDateTimeCheckCallBack>;
