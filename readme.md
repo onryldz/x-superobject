@@ -385,10 +385,28 @@ type
     Parse: TTestRec; // For Record;
     S: String;
   begin
-    Parse := TSuperRecord<TTestRec>.FromJSON('{"A": 1, "B": 0, "C": true, "D": "Hello", "E":{"A": 3, "B": "Delphi"}, "F": {"A": 4, "B": 5}, "G": [0,2], "H": "2014-05-03T03:25:05.059", "J": "2014-05-03", "K": "03:25:05", "L":[{"A": 4, "B": 5},{"A": 6, "B": 7}]}');  
-    S := TSuperRecord<TTestRec>.AsJSON(Parse);
+    Parse := TJSON.Parse<TTestRec>('{"A": 1, "B": 0, "C": true, "D": "Hello", "E":{"A": 3, "B": "Delphi"}, "F": {"A": 4, "B": 5}, "G": [0,2], "H": "2014-05-03T03:25:05.059", "J": "2014-05-03", "K": "03:25:05", "L":[{"A": 4, "B": 5},{"A": 6, "B": 7}]}');  
+    S := TJSON.Stringify<TTestRec>(Parse);
   end;
   
+```
+```pascal
+type
+  TRec = record // or class
+    A: Integer;
+    B: String;
+  end;
+  
+  implementation
+  ...
+  
+  var
+    Test: TArray<TRec>;
+    S: String;
+  begin
+    Test := TJSON.Parse<TArray<TRec>>('[{"A": 1, "B": "1"}, {"A": 2, "B": "2"}]');
+    S := TJSON.Stringify<TArray<TRec>>(Test);
+  end;
 ```
 ----------
 ###Marshalling **Attributes**
