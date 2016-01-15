@@ -1,4 +1,4 @@
- (*
+﻿ (*
   *                       XSuperObject - Simple JSON Framework
   *
   * The MIT License (MIT)
@@ -201,6 +201,7 @@ type
   public
     constructor Create(JSON: String = '{}'; const CheckDate: Boolean = True); overload;
     constructor Create(JSON: T; const CheckDate: Boolean = True); overload;
+    constructor CreateCasted(Value: IJSONAncestor; const CheckDate: Boolean = True);
     destructor Destroy; override;
     property Null[V: Typ]: TMemberStatus read GetNull write SetNull;
     property S[V: Typ]: String read GetString write SetString;
@@ -460,8 +461,18 @@ type
     ArrayRawData: Pointer;
   end;
 
+  TSuperDynArr = class(TRttiDynamicArrayType)
+  public
+    ArrayRawData: Pointer;
+  end;
+
+  TSuperArr = class(TRttiArrayType)
+  public
+    ArrayRawData: Pointer;
+  end;
+
   TGenericsType = (gtNil, gtList, gtObjectList);
-  
+
   TGenericsInfo = class
   private
     FContext: TRttiContext;
@@ -520,19 +531,19 @@ type
     class procedure WriteRecord(Info: PTypeInfo; ARecord: Pointer; IData: ISuperObject);
     class procedure WriteRecordEx<T>(Rec: T; IData: ISuperObject);
     class procedure WriteMembers(Data: Pointer; aType: TRttiType; IJsonData: ISuperObject);
-    class procedure WriteMember<T, Typ>(Data: Pointer; Member: Typ; RType: PTypeInfo; MemberValue: TRttiMember; IJsonData: IBaseJSON<T, Typ>);
-    class procedure WriteSet(Data: Pointer; Member: TRttiMember; IJSONData: ISuperArray);
-    class procedure SetValue<Typ>(Data: Pointer; Member: TRttiMember; MIdx: Typ; Val: TValue);
-    class function  GetValue<Typ>(Data: Pointer; Member: TRttiMember; MIdx: Typ): TValue;
-    class function  GetMemberTypeInfo(Member: TRttiMember; const GetArray: Boolean = true): PTypeInfo; inline;
-    class function  GetMemberType(Member: TRttiMember; const GetArray: Boolean = true): TRttiType; //inline;
-    class function  GetArrayRawData(Member: TRttiMember): Pointer; inline;
-    class procedure SetArrayRawData(Member: TRttiMember; RawData: Pointer);
-    class procedure ClearArrayRawData(Member: TRttiMember);
+    class procedure WriteMember<T, Typ>(Data: Pointer; Member: Typ; RType: PTypeInfo; MemberValue: TRttiObject; IJsonData: IBaseJSON<T, Typ>);
+    class procedure WriteSet(Data: Pointer; Member: TRttiObject; IJSONData: ISuperArray);
+    class procedure SetValue<Typ>(var Data: Pointer; Member: TRttiObject; MIdx: Typ; Val: TValue);
+    class function  GetValue<Typ>(Data: Pointer; Member: TRttiObject; MIdx: Typ): TValue;
+    class function  GetMemberTypeInfo(Member: TRttiObject; const GetArray: Boolean = true): PTypeInfo; inline;
+    class function  GetMemberType(Member: TRttiObject; const GetArray: Boolean = true): TRttiType; //inline;
+    class function  GetArrayRawData(Member: TRttiObject): Pointer;
+    class procedure SetArrayRawData(Member: TRttiObject; RawData: Pointer);
+    class procedure ClearArrayRawData(Member: TRttiObject);
 
     class function  ObjectConstructorParamCount(Instance: TClass): Integer;
     class function  ObjectConstructor(Instance: TClass): TObject;
-    class function  CheckObject<Typ>(Data: Pointer; Member: TRttiMember; MIdx: Typ; var Obj: TObject): Boolean;
+    class function  CheckObject<Typ>(Data: Pointer; Member: TRttiObject; MIdx: Typ; var Obj: TObject): Boolean;
 
     class property  GenericsCache: TObjectDictionary<TClass, TGenericsInfo> read FGenericsCache;
   end;
@@ -561,8 +572,17 @@ type
     class function FromJSON(JSON: String): T; overload;
     class function FromJSON(JSON: ISuperObject): T; overload;
   end;
-
   TSuperRecord<T: Record> = class(TBaseSuperRecord<T>);
+
+  TJSON = class
+  public
+    class function Parse<T>(const Value: String): T; overload;
+    class function Parse<T>(JSON: ISuperObject): T; overload;
+    class function SuperObject<T>(Value: T): ISuperObject; overload;
+    class function SuperObject(Value: TValue): ISuperObject; overload;
+    class function Stringify<T>(Value: T; Indent: Boolean = False; UniversalTime: Boolean = True): String; overload;
+    class function Stringify(Value: TValue; Indent: Boolean = False; UniversalTime: Boolean = True): String; overload;
+  end;
 
   function SO(JSON: String = '{}'): ISuperObject; overload;
   function SO(const Args: array of const): ISuperObject; overload;
@@ -781,6 +801,14 @@ begin
   FCasted := nil;
   FCheckDate := CheckDate;
   FInterface := TValue.From<T>(JSON).AsInterface;
+end;
+
+constructor TBaseJSON<T, Typ>.CreateCasted(Value: IJSONAncestor; const CheckDate: Boolean);
+begin
+//  FJSONObj := Nil;
+  FInterface := Nil;
+  FCasted := Value;
+  FCheckDate := CheckDate;
 end;
 
 function TBaseJSON<T, Typ>.DefaultValueClass<TT>(const Value): TT;
@@ -1127,28 +1155,8 @@ begin
 end;
 
 function TSuperObject.AsType<T>: T;
-var
-  Ctx: TRttiContext;
-  Typ: TRttiType;
 begin
-  Ctx := TRttiContext.Create;
-  try
-    Typ := Ctx.GetType(TypeInfo(T));
-    if not Assigned(Typ) then
-       Exit;
-    if Typ.IsRecord then
-       Result := TBaseSuperRecord<T>.FromJSON(Self)
-    else if Typ.IsInstance then
-    begin
-      Result := Typ.GetMethod('Create').Invoke(Typ.AsInstance.MetaclassType, []).AsType<T>;
-      TSerializeParse.WriteObject(TValue.From<T>(Result).AsObject, Self);
-    end
-    else
-      raise SOException.Create('Unsupported type.');
-  except
-    Ctx.Free;
-    raise;
-  end;
+  Result := TJSON.Parse<T>(Self);
 end;
 
 function TSuperObject.Cast: ICast;
@@ -1464,7 +1472,7 @@ end;
 
 procedure TSuperArray.Delete(Index: Integer);
 begin
-  FJSONObj.Remove(Index);
+  TJsonArray(FJSONObj).Remove(Index);
 end;
 
 function TSuperArray.GetEnumerator: TSuperEnumerator<IJSONAncestor>;
@@ -1697,11 +1705,11 @@ begin
 end;
 
 class function TSerializeParse.CheckObject<Typ>(Data: Pointer;
-  Member: TRttiMember; MIdx: Typ; var Obj: TObject): Boolean;
+  Member: TRttiObject; MIdx: Typ; var Obj: TObject): Boolean;
 var
   rtype: TRttiType;
   rawData: Pointer;
-  Val: TValue;
+  Val, ArrVal: TValue;
 begin
   Obj := Nil;
   rawData := GetArrayRawData(Member);
@@ -1713,6 +1721,16 @@ begin
     begin
       Obj := ObjectConstructor(rtype.AsInstance.MetaclassType);
       TValue.Make(@Obj, rtype.Handle , Val);
+      if Member.ClassType = TRttiDynamicArrayType then begin
+         TValue.Make(rawData, TRttiDynamicArrayType(Member).Handle, ArrVal);
+         rawData := ArrVal.GetReferenceToRawArrayElement(PInteger(@MIdx)^)
+
+      end else if Member.ClassType = TRttiArrayType then begin
+         TValue.Make(rawData, TRttiArrayType(Member).Handle, ArrVal);
+         rawData := ArrVal.GetReferenceToRawArrayElement(PInteger(@MIdx)^)
+
+      end;
+
       SetValue<Typ>(rawData, Member, MIdx, Val);
     end;
   end
@@ -1729,14 +1747,9 @@ begin
   Result := Obj <> nil;
 end;
 
-class procedure TSerializeParse.ClearArrayRawData(Member: TRttiMember);
+class procedure TSerializeParse.ClearArrayRawData(Member: TRttiObject);
 begin
-  if Member is TRttiProperty  then
-     TSuperProperty(Member).ArrayRawData := Nil
-  else
-  if Member is TRttiField then
-     TSuperField(Member).ArrayRawData:= Nil
-
+  SetArrayRawData(Member, Nil);
 end;
 
 class constructor TSerializeParse.Create;
@@ -1750,13 +1763,20 @@ begin
 end;
 
 {$WARNINGS OFF}
-class function TSerializeParse.GetArrayRawData(Member: TRttiMember): Pointer;
+class function TSerializeParse.GetArrayRawData(Member: TRttiObject): Pointer;
 begin
   if Member is TRttiProperty  then
      Result := TSuperProperty(Member).ArrayRawData
-  else
-  if Member is TRttiField then
+
+  else if Member is TRttiField then
      Result := TSuperField(Member).ArrayRawData
+
+  else if Member is TRttiDynamicArrayType then
+     Result := TSuperDynArr(Member).ArrayRawData
+
+  else if Member is TRttiArrayType then
+     Result := TSuperArr(Member).ArrayRawData;
+
 end;
 {$WARNINGS ON}
 
@@ -1771,7 +1791,7 @@ begin
 end;
 
 class function TSerializeParse.GetGenericsCreateArgs(Cls: TRttiType): TArray<TValue>;
-var 
+var
   Info: TGenericsInfo;
 begin
   SetLength(Result, 0);
@@ -1802,32 +1822,36 @@ begin
 end;
 
 {$WARNINGS OFF}
-class function TSerializeParse.GetMemberType(Member: TRttiMember; const GetArray: Boolean): TRttiType;
+class function TSerializeParse.GetMemberType(Member: TRttiObject; const GetArray: Boolean): TRttiType;
 begin
-  if Member is TRttiProperty  then
-  begin
+  if Member is TRttiProperty  then begin
      Result := TRttiProperty(Member).PropertyType;
      if GetArray and (TSuperProperty(Member).ArrayRawData <> Nil) then
         if Result is TRttiArrayType then
            Result := TRttiArrayType(Result).ElementType
         else
            Result := TRttiDynamicArrayType(Result).ElementType;
-  end
-  else
-  if Member is TRttiField then
-  begin
+
+  end else if Member is TRttiField then begin
      Result := TRttiField(Member).FieldType;
      if GetArray and (TSuperField(Member).ArrayRawData <> Nil) then
         if Result is TRttiArrayType then
            Result := TRttiArrayType(Result).ElementType
         else
            Result := TRttiDynamicArrayType(Result).ElementType;
+
+  end else if Member is TRttiDynamicArrayType then begin
+     Result := TRttiDynamicArrayType(Member).ElementType
+
+  end else if Member is TRttiArrayType then begin
+     Result := TRttiArrayType(Member).ElementType
+
   end;
 end;
 {$WARNINGS ON}
 
 class function TSerializeParse.GetMemberTypeInfo(
-  Member: TRttiMember; const GetArray: Boolean): PTypeInfo;
+  Member: TRttiObject; const GetArray: Boolean): PTypeInfo;
 begin
   Result := GetMemberType(Member, GetArray).Handle
 end;
@@ -1838,18 +1862,21 @@ begin
 end;
 
 class function TSerializeParse.GetValue<Typ>(Data: Pointer;
-  Member: TRttiMember; MIdx: Typ): TValue;
+  Member: TRttiObject; MIdx: Typ): TValue;
 begin
   if (TypeInfo(Typ) = TypeInfo(Integer) ) and ( GetMemberTypeInfo(Member, False).Kind in [tkDynArray, tkArray] ) then
-      Result := GetValue<String>(GetArrayRawData(Member), Member, '')
-                        .GetArrayElement(PInteger(@MIdx)^)
-  else
+      Result := GetValue<String>(GetArrayRawData(Member), Member, '').GetArrayElement(PInteger(@MIdx)^)
 
-  if Member is TRttiProperty  then
+  else if Member is TRttiProperty  then
      Result := TRttiProperty(Member).GetValue(Data)
-  else
-  if Member is TRttiField then
-     Result := TRttiField(Member).GetValue(Data);
+
+  else if Member is TRttiField then
+     Result := TRttiField(Member).GetValue(Data)
+
+  else if Member is TRttiDynamicArrayType then begin
+     TValue.Make(GetArrayRawData(Member), TRttiDynamicArrayType(Member).Handle, Result);
+     Result := Result.GetArrayElement(PInteger(@MIdx)^);
+  end;
 end;
 
 class function TSerializeParse.IsDisabled(const Attributes: TArray<TCustomAttribute>): Boolean;
@@ -2131,18 +2158,23 @@ end;
 
 
 
-class procedure TSerializeParse.SetArrayRawData(Member: TRttiMember;
+class procedure TSerializeParse.SetArrayRawData(Member: TRttiObject;
   RawData: Pointer);
 begin
   if Member is TRttiProperty  then
      TSuperProperty(Member).ArrayRawData := RawData
-  else
-  if Member is TRttiField then
+
+  else if Member is TRttiField then
      TSuperField(Member).ArrayRawData:= RawData
 
+  else if Member is TRttiDynamicArrayType then
+     TSuperDynArr(Member).ArrayRawData := RawData
+
+  else if Member is TRttiArrayType then
+     TSuperArr(Member).ArrayRawData := RawData;
 end;
 
-class procedure TSerializeParse.SetValue<Typ>(Data: Pointer; Member: TRttiMember; MIdx: Typ; Val: TValue);
+class procedure TSerializeParse.SetValue<Typ>(var Data: Pointer; Member: TRttiObject; MIdx: Typ; Val: TValue);
 var
   RVal: REVAL;
 begin
@@ -2159,21 +2191,24 @@ begin
          end;
       end;
 
-    if Member is TRttiProperty  then
-    begin
-       RVal := GetREVAL(TRttiProperty(Member).GetAttributes);
-       if (RVal <> Nil) and (RVal.CheckEQ(Val)) then
-           Val := TValue.FromVariant(RVal.Value);
-       TRttiProperty(Member).SetValue(Data, Val)
-    end
-    else
-    if Member is TRttiField then
-    begin
+  if Member is TRttiProperty  then begin
+     RVal := GetREVAL(TRttiProperty(Member).GetAttributes);
+     if (RVal <> Nil) and (RVal.CheckEQ(Val)) then
+         Val := TValue.FromVariant(RVal.Value);
+     TRttiProperty(Member).SetValue(Data, Val)
+
+  end else if Member is TRttiField then begin
        RVal := GetREVAL(TRttiProperty(Member).GetAttributes);
        if (RVal <> Nil) and (RVal.CheckEQ(Val)) then
            Val := TValue.FromVariant(RVal.Value);
        TRttiField(Member).SetValue(Data, Val);
-    end;
+
+  end else begin
+      if Val.IsObject then
+         PPointer(Data)^ := Val.AsObject
+      else
+         PPointer(Data)^ := Val.GetReferenceToRawData
+  end;
 
 end;
 
@@ -2191,17 +2226,19 @@ begin
       begin
          Item := ObjectConstructor(Info.Typ.AsInstance.MetaclassType);
          WriteMembers(Item, Info.Typ, JMembers.AsObject);
-         Info.AddVal(AObject, Item);         
+         Info.AddVal(AObject, Item);
       end;
 end;
 
 class procedure TSerializeParse.WriteMember<T, Typ>(Data: Pointer; Member: Typ;
-  RType: PTypeInfo; MemberValue: TRttiMember; IJsonData: IBaseJSON<T, Typ>);
+  RType: PTypeInfo; MemberValue: TRttiObject; IJsonData: IBaseJSON<T, Typ>);
 var
   I,J: Integer;
   P: Pointer;
   V: Variant;
   SubVal: TValue;
+  SubArr: ISuperArray;
+  DataType: TDataType;
   Obj: TObject;
 
 begin
@@ -2268,52 +2305,60 @@ begin
          end;
        end;
 
-    tkArray:
-      begin
-        SetArrayRawData(MemberValue, Data);
-        J := IJSONData.A[Member].Length;
-        SubVal := GetValue<Typ>(Data, MemberValue, Member);
-        if SubVal.GetArrayLength < J then
-           J := SubVal.GetArrayLength;
-
-        for I := 0 to J-1 do
-              WriteMember<IJSONArray, Integer>
-                         (SubVal.GetReferenceToRawArrayElement(I),
-                          I,
-                          GetMemberTypeInfo(MemberValue),
-                          MemberValue,
-                          IJsonData.A[Member]);
-        SetValue<String>(Data, MemberValue,'', SubVal );
-        ClearArrayRawData(MemberValue);
-      end;
-
-    tkDynArray:
+    tkDynArray, tkArray:
       begin
         if IJSonData.Null[Member] = jAssigned then
         begin
           SetArrayRawData(MemberValue, Data);
-          J := IJSonData.A[Member].Length;
-          SubVal := GetValue<Typ>(Data, MemberValue, Member);
-          DynArraySetLength(PPointer(SubVal.GetReferenceToRawData)^, SubVal.TypeInfo, 1, @J);
-          SetValue<String>(Data, MemberValue,'', SubVal );
-          for I := 0 to J-1 do
-              WriteMember<IJSONArray, Integer>
-                         (SubVal.GetReferenceToRawArrayElement(I),
-                          I,
-                          GetMemberTypeInfo(MemberValue),
-                          MemberValue,
-                          IJsonData.A[Member]);
-          ClearArrayRawData(MemberValue);
+          try
+            DataType := IJSONData.DataType;
+            if DataType = dtArray then begin
+               SubArr := IJSONData.AsArray;
+               J := IJsonData.AsArray.Length;
+               if RType.Kind = tkDynArray then
+                  DynArraySetLength(PPointer(Data)^, RType, 1, @J);
+               TValue.Make(Data, Rtype, SubVal);
+
+            end else begin
+               J := IJSonData.A[Member].Length;
+               SubVal := GetValue<Typ>(Data, MemberValue, Member);
+               if RType.Kind = tkDynArray then begin
+                   DynArraySetLength(PPointer(SubVal.GetReferenceToRawData)^, SubVal.TypeInfo, 1, @J);
+                   SetValue<String>(Data, MemberValue,'', SubVal );
+               end;
+
+            end;
+
+            for I := 0 to J-1 do begin
+                if DataType <> dtArray then
+                   SubArr := IJSONData.A[Member];
+                WriteMember<IJSONArray, Integer>
+                           (SubVal.GetReferenceToRawArrayElement(I),
+                            I,
+                            GetMemberTypeInfo(MemberValue),
+                            MemberValue,
+                            SubArr);
+            end;
+
+            if DataType = dtArray then
+               SubVal.ExtractRawData(Data);
+
+          finally
+            ClearArrayRawData(MemberValue);
+          end;
         end;
       end;
 
-    tkRecord:
-      begin
-         P := IValueData(TValueData( GetValue<Typ>(Data, MemberValue, Member) ).FValueData).GetReferenceToRawData;
-         WriteRecord(GetMemberTypeInfo(MemberValue), P, IJSonData.O[Member]);
-         TValue.Make(P, GetMemberTypeInfo(MemberValue), SubVal);
-         SetValue<Typ>(Data, MemberValue, Member, SubVal );
-      end;
+    tkRecord: begin
+        if (MemberValue.ClassType = TRttiDynamicArrayType) or (MemberValue.ClassType = TRttiArrayType) then
+           WriteRecord(GetMemberTypeInfo(MemberValue), Data, IJSonData.O[Member])
+        else begin
+           P := IValueData(TValueData( GetValue<Typ>(Data, MemberValue, Member) ).FValueData).GetReferenceToRawData;
+           WriteRecord(GetMemberTypeInfo(MemberValue), P, IJSonData.O[Member]);
+           TValue.Make(P, GetMemberTypeInfo(MemberValue), SubVal);
+           SetValue<Typ>(Data, MemberValue, Member, SubVal );
+        end;
+    end;
 
     tkInterface:
       if (TypeInfo(ISuperObject) = GetMemberTypeInfo(MemberValue)) And (IJsonData.Ancestor[Member].DataType = dtObject) then
@@ -2401,7 +2446,7 @@ begin
         WriteRecord(TypeInfo, GetReferenceToRawData, IData);
 end;
 
-class procedure TSerializeParse.WriteSet(Data: Pointer; Member: TRttiMember;
+class procedure TSerializeParse.WriteSet(Data: Pointer; Member: TRttiObject;
   IJSONData: ISuperArray);
 var
   Sets: TIntegerSet;
@@ -2820,7 +2865,7 @@ constructor TGenericsInfo.Create(GenericClass: TClass;const AIsGeneric: Boolean;
 begin
   IsGeneric := AIsGeneric;
   Typ := AType;
-  if GenericClass <> Nil then 
+  if GenericClass <> Nil then
   begin
      FContext := TRttiContext.Create;
      FType := FContext.GetType(GenericClass);
@@ -2864,7 +2909,7 @@ end;
 
 constructor REVAL.Create(EQVal, NewVal: String);
 begin
-  FEqual := EQVal;  
+  FEqual := EQVal;
   FValue := NewVal;
 end;
 
@@ -2909,6 +2954,171 @@ end;
 class constructor TSerializeParseOptions.Create;
 begin
   FVisibilities := [mvPublic, mvPublished];
+end;
+
+{ TSerialize<T> }
+
+class function TJSON.SuperObject(Value: TValue): ISuperObject;
+var
+  Ctx: TRttiContext;
+  Typ: TRttiType;
+  I: Integer;
+  SubVal: TValue;
+  _Array: ISuperArray;
+begin
+  Ctx := TRttiContext.Create;
+  try
+    Typ := Ctx.GetType(Value.TypeInfo);
+    if not Assigned(Typ) then Exit(SO);
+
+    if Typ.IsRecord then begin
+       Result := TSuperObject.Create;
+       TSerializeParse.ReadRecord(Value.TypeInfo, Value.GetReferenceToRawData, Result)
+
+    end else if Typ.IsInstance then begin
+       Result := TSuperObject.Create;
+       TSerializeParse.ReadObject(Value.AsObject, Result);
+
+    end else if Typ.Handle = TypeInfo(TDateTime) then begin
+       Result := TSuperObject.CreateCasted(TJSONDateTime.Create(Value.AsExtended));
+
+    end else if Typ.Handle = TypeInfo(TDate) then begin
+       Result := TSuperObject.CreateCasted(TJSONDate.Create(Value.AsExtended));
+
+    end else if Typ.Handle = TypeInfo(TTime) then begin
+       Result := TSuperObject.CreateCasted(TJSONTime.Create(Value.AsExtended));
+
+    end else if Typ.Handle = TypeInfo(Boolean) then begin
+       Result := TSuperObject.CreateCasted(TJSONBoolean.Create(Value.AsBoolean));
+
+    end else begin
+       case Typ.TypeKind of
+         tkInteger:
+            Result := TSuperObject.CreateCasted(TJSONInteger.Create(Int64(Value.AsInteger)));
+
+         tkFloat:
+            Result := TSuperObject.CreateCasted(TJSONFloat.Create(Value.AsExtended));
+
+         tkInt64:
+            Result := TSuperObject.CreateCasted(TJSONInteger.Create(Value.AsInt64));
+
+         tkString:
+            Result := TSuperObject.CreateCasted(TJSONString.Create(Value.AsString));
+
+         tkDynArray, tkArray: begin
+            Result := TSuperObject.CreateCasted(TJSONArray.Create);
+            _Array := Result.AsArray;
+            for I := 0 to Value.GetArrayLength - 1 do begin
+                SubVal := Value.GetArrayElement(I);
+                TSerializeParse.ReadMember<IJSONArray, Integer>(
+                                I,
+                                SubVal.TypeInfo,
+                                SubVal,
+                                _Array);
+            end;
+         end;
+
+         tkUString:
+            Result := TSuperObject.CreateCasted(TJSONString.Create(Value.AsString));
+       end;
+
+    end;
+  except
+    Ctx.Free;
+    raise;
+  end;
+end;
+
+
+class function TJSON.Parse<T>(JSON: ISuperObject): T;
+var
+  Ctx: TRttiContext;
+  Typ: TRttiType;
+  DType: TDataType;
+  _Array: ISuperArray;
+  _PResult: Pointer;
+  I: Integer;
+type PTime = ^TTime;
+begin
+  Ctx := TRttiContext.Create;
+  try
+    Typ := Ctx.GetType(TypeInfo(T));
+    if not Assigned(Typ) then
+       Exit(Default(T));
+
+    if Typ.IsRecord then
+       Result := TBaseSuperRecord<T>.FromJSON(JSON)
+
+    else if Typ.IsInstance then begin
+       Result := Typ.GetMethod('Create').Invoke(Typ.AsInstance.MetaclassType, []).AsType<T>;
+       TSerializeParse.WriteObject(TValue.From<T>(Result).AsObject, JSON);
+
+    end else if Typ.Handle = TypeInfo(TDateTime) then begin
+       PDateTime(@Result)^ := JSON.Cast.AsDateTime
+
+    end else if Typ.Handle = TypeInfo(TDate) then begin
+       PDate(@Result)^ := JSON.Cast.AsDate
+
+    end else if Typ.Handle = TypeInfo(TTime) then begin
+       PTime(@Result)^ := JSON.Cast.AsTime
+
+    end else if Typ.Handle = TypeInfo(Boolean) then begin
+       PBoolean(@Result)^ := JSON.Cast.AsBoolean
+
+    end else begin
+       case Typ.TypeKind of
+         tkInteger:
+            PInteger(@Result)^ := Integer(JSON.Cast.AsInteger);
+
+         tkFloat:
+            PDouble(@Result)^ := JSON.Cast.AsFloat;
+
+         tkInt64:
+            PInt64(@Result)^ := JSON.Cast.AsInteger;
+
+         tkString:
+            PAnsiString(@Result)^ := AnsiString(JSON.Cast.AsString);
+
+         tkDynArray, tkArray: begin
+            _Array := JSON.AsArray;
+            _PResult := @Result;
+            TSerializeParse.WriteMember<IJSONArray, Integer>(
+                                _PResult,
+                                0,
+                                Typ.Handle,
+                                Typ,
+                                _Array);
+         end;
+
+         tkUString:
+            PString(@Result)^ := JSON.Cast.AsString;
+       end;
+
+    end;
+  except
+    Ctx.Free;
+    raise;
+  end;
+end;
+
+class function TJSON.Stringify(Value: TValue; Indent, UniversalTime: Boolean): String;
+begin
+  Result := SuperObject(Value).AsJSON(Indent, UniversalTime);
+end;
+
+class function TJSON.Stringify<T>(Value: T; Indent: Boolean; UniversalTime: Boolean): String;
+begin
+  Result := SuperObject<T>(Value).AsJSON(Indent, UniversalTime);
+end;
+
+class function TJSON.Parse<T>(const Value: String): T;
+begin
+  Result := Parse<T>(SO(Value));
+end;
+
+class function TJSON.SuperObject<T>(Value: T): ISuperObject;
+begin
+  Result := SuperObject(TValue.From<T>(Value));
 end;
 
 initialization
