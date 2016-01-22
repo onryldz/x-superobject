@@ -38,6 +38,7 @@ uses
   XSuperJSON,
   RTTI,
   TypInfo,
+  DB,
   Generics.Collections,
   IdGlobal,
   IdCoderMIME;
@@ -579,7 +580,9 @@ type
     class function Parse<T>(const Value: String): T; overload;
     class function Parse<T>(JSON: ISuperObject): T; overload;
     class function SuperObject<T>(Value: T): ISuperObject; overload;
+    class function SuperObject(Value: TDataSet): ISuperObject; overload;
     class function SuperObject(Value: TValue): ISuperObject; overload;
+    class function Stringfy(Value: TDataSet): String; overload;
     class function Stringify<T>(Value: T; Indent: Boolean = False; UniversalTime: Boolean = True): String; overload;
     class function Stringify(Value: TValue; Indent: Boolean = False; UniversalTime: Boolean = True): String; overload;
   end;
@@ -2979,6 +2982,12 @@ begin
        Result := TSuperObject.Create;
        TSerializeParse.ReadObject(Value.AsObject, Result);
 
+    end else if Typ.TypeKind = tkInterface then begin
+       if Typ.Handle = TypeInfo(ISuperObject) then
+          Result := Value.AsType<ISuperObject>
+       else if Typ.Handle = TypeInfo(ISuperArray) then
+          Result := TSuperObject.CreateCasted(Value.AsType<ISuperArray>.Self)
+
     end else if Typ.Handle = TypeInfo(TDateTime) then begin
        Result := TSuperObject.CreateCasted(TJSONDateTime.Create(Value.AsExtended));
 
@@ -3101,9 +3110,76 @@ begin
   end;
 end;
 
+class function TJSON.Stringfy(Value: TDataSet): String;
+begin
+  Result := SuperObject(Value).AsJSON(False, True);
+end;
+
 class function TJSON.Stringify(Value: TValue; Indent, UniversalTime: Boolean): String;
 begin
   Result := SuperObject(Value).AsJSON(Indent, UniversalTime);
+end;
+
+class function TJSON.SuperObject(Value: TDataSet): ISuperObject;
+var
+  I, J, Z: Integer;
+  Rec: ISuperObject;
+  Return: ISuperArray;
+  Bookmark: TBookmark;
+  ABytes: TArray<Byte>;
+begin
+  Return := SA;
+  Bookmark := Value.Bookmark;
+  Value.DisableControls;
+  try
+    if not Value.Active then
+       Value.Active := True;
+    Value.First;
+    for I := 0 to Value.RecordCount - 1 do begin
+        Rec := SO;
+        for J := 0 to Value.FieldCount - 1 do with Value.Fields.Fields[J] do begin
+            case DataType of
+              ftString:
+                 Rec.S[FieldName] := AsString;
+              ftSmallint, ftInteger:
+                 Rec.I[FieldName] := AsInteger;
+              ftBoolean:
+                 Rec.B[FieldName] := AsBoolean;
+              ftFloat:
+                 Rec.F[FieldName] := AsFloat;
+              ftCurrency:
+                 Rec.F[FieldName] := AsCurrency;
+              ftDate:
+                 Rec.Date[FieldName] := TDate(AsDateTime);
+              ftTime:
+                 Rec.Time[FieldName] := TTime(AsDateTime);
+              ftDateTime:
+                 Rec.D[FieldName] := AsDateTime;
+              ftWideString:
+                 Rec.S[FieldName] := AsWideString;
+              ftLargeint:
+                 Rec.I[FieldName] := AsLargeInt;
+              ftVariant:
+                 Rec.V[FieldName] := AsVariant;
+              ftShortint:
+                 Rec.I[FieldName] := AsInteger;
+              ftByte: begin
+                 ABytes := AsBytes;
+                 with Rec.A[FieldName] do
+                      for Z := 0 to High(ABytes) do
+                          Add(ABytes[Z]);
+              end;
+              ftExtended:
+                 Rec.D[FieldName] := AsExtended;
+            end;
+        end;
+        Return.Add(Rec);
+    end;
+  finally
+    Value.Bookmark := Bookmark;
+    Value.EnableControls;
+  end;
+  Result := TSuperObject.CreateCasted(Return.Self);
 end;
 
 class function TJSON.Stringify<T>(Value: T; Indent: Boolean; UniversalTime: Boolean): String;
