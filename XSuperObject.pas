@@ -3174,6 +3174,7 @@ begin
             end;
         end;
         Return.Add(Rec);
+        Value.Next;
     end;
   finally
     Value.Bookmark := Bookmark;
