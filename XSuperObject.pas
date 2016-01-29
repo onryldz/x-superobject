@@ -493,6 +493,7 @@ type
   end;
 
   TAttributeClass = class of TCustomAttribute;
+  TPropertyGetterType = (pgtField, pgtMethod);
 
   TSerializeParse = class
   private
@@ -503,6 +504,7 @@ type
     class function  IsDisabled(const Attributes: TArray<TCustomAttribute>): Boolean; inline;
     class function  IsDisabledRead(const Attributes: TArray<TCustomAttribute>): Boolean; inline;
     class function  IsDisabledWrite(const Attributes: TArray<TCustomAttribute>): Boolean; inline;
+    class function  PropGetterType(Prop: TRttiProperty): TPropertyGetterType;
   public
     class constructor Create;
     class destructor Destroy;
@@ -564,6 +566,8 @@ type
     function AsJSONObject: ISuperObject;
     constructor FromJSON(const JSON: String); overload;
     constructor FromJSON(JSON: ISuperObject); overload;
+    constructor FromJSON(const JSON: String; CreateArgs: Array of TValue; const ConstructMethod: String = 'Create'); overload;
+    constructor FromJSON(const JSON: ISuperObject; CreateArgs: Array of TValue; const ConstructMethod: String = 'Create'); overload;
   end;
 
   TBaseSuperRecord<T> = class
@@ -1579,12 +1583,8 @@ begin
 end;
 
 constructor TSuperObjectHelper.FromJSON(const JSON: String);
-var
-  IData: ISuperObject;
 begin
-  inherited Create;
-  IData := TSuperObject.Create(JSON);
-  TSerializeParse.WriteObject(Self, IData);
+  FromJSON(JSON, []);
 end;
 
 function TSuperObjectHelper.AsJSONObject: ISuperObject;
@@ -1599,10 +1599,36 @@ begin
   end;
 end;
 
+constructor TSuperObjectHelper.FromJSON(const JSON: String; CreateArgs: array of TValue; const ConstructMethod: String);
+var
+  IData: ISuperObject;
+begin
+  IData := TSuperObject.Create(JSON);
+  FromJSON(IData, CreateArgs, ConstructMethod);
+end;
+
+constructor TSuperObjectHelper.FromJSON(const JSON: ISuperObject; CreateArgs: array of TValue; const ConstructMethod: String);
+var
+  Ctx: TRttiContext;
+  Typ: TRttiType;
+  Method: TRttiMethod;
+begin
+  Ctx := TRttiContext.Create;
+  try
+    Typ := Ctx.GetType(ClassType);
+    if not Assigned(Typ) then Exit;
+    Method := Typ.GetMethod(ConstructMethod);
+    if (not Assigned(Method)) or not Method.IsConstructor then Exit;
+    Method.Invoke(Self, CreateArgs);
+  finally
+    Ctx.Free;
+    TSerializeParse.WriteObject(Self, JSON);
+  end;
+end;
+
 constructor TSuperObjectHelper.FromJSON(JSON: ISuperObject);
 begin
-  inherited Create;
-  TSerializeParse.WriteObject(Self, JSON);
+  FromJSON(JSON, []);
 end;
 
 { TSerializeParse }
@@ -1864,16 +1890,33 @@ begin
   Result := REVAL(GetAttribute(REVAL, Attributues));
 end;
 
+class function TSerializeParse.PropGetterType(Prop: TRttiProperty): TPropertyGetterType;
+var
+  Getter: Pointer;
+begin
+  Getter := TRttiInstanceProperty(Prop).PropInfo^.GetProc;
+  if Prop is TRttiInstanceProperty then begin
+     Getter := TRttiInstanceProperty(Prop).PropInfo^.GetProc;
+     if (IntPtr(Getter) and PROPSLOT_MASK) <> PROPSLOT_FIELD then
+        Exit(pgtMethod);
+  end;
+  Result := pgtField;
+end;
+
 class function TSerializeParse.GetValue<Typ>(Data: Pointer;
   Member: TRttiObject; MIdx: Typ): TValue;
 begin
   if (TypeInfo(Typ) = TypeInfo(Integer) ) and ( GetMemberTypeInfo(Member, False).Kind in [tkDynArray, tkArray] ) then
       Result := GetValue<String>(GetArrayRawData(Member), Member, '').GetArrayElement(PInteger(@MIdx)^)
 
-  else if Member is TRttiProperty  then
+  else if Member is TRttiProperty  then begin
+     if (TRttiProperty(Member).PropertyType.Handle.Kind = tkDynArray) and (PropGetterType(TRttiProperty(Member)) = pgtMethod) then begin
+        TValue.Make(Nil, TRttiProperty(Member).PropertyType.Handle, Result);
+        Exit;
+     end;
      Result := TRttiProperty(Member).GetValue(Data)
 
-  else if Member is TRttiField then
+  end else if Member is TRttiField then
      Result := TRttiField(Member).GetValue(Data)
 
   else if Member is TRttiDynamicArrayType then begin
@@ -2243,7 +2286,6 @@ var
   SubArr: ISuperArray;
   DataType: TDataType;
   Obj: TObject;
-
 begin
   if not IJsonData.Contains(Member) then
      Exit;
@@ -2309,66 +2351,76 @@ begin
        end;
 
     tkDynArray, tkArray:
-      begin
-        if IJSonData.Null[Member] = jAssigned then
-        begin
-          SetArrayRawData(MemberValue, Data);
-          try
-            DataType := IJSONData.DataType;
-            if DataType = dtArray then begin
-               SubArr := IJSONData.AsArray;
-               J := IJsonData.AsArray.Length;
-               if RType.Kind = tkDynArray then
-                  DynArraySetLength(PPointer(Data)^, RType, 1, @J);
-               TValue.Make(Data, Rtype, SubVal);
+       begin
+         if IJSonData.Null[Member] = jAssigned then
+         begin
+           SetArrayRawData(MemberValue, Data);
+           try
+             DataType := IJSONData.DataType;
+             if DataType = dtArray then begin
+                SubArr := IJSONData.AsArray;
+                J := IJsonData.AsArray.Length;
+                if RType.Kind = tkDynArray then
+                   DynArraySetLength(PPointer(Data)^, RType, 1, @J);
+                TValue.Make(Data, Rtype, SubVal);
 
-            end else begin
-               J := IJSonData.A[Member].Length;
-               SubVal := GetValue<Typ>(Data, MemberValue, Member);
-               if RType.Kind = tkDynArray then begin
+             end else begin
+                J := IJSonData.A[Member].Length;
+                SubVal := GetValue<Typ>(Data, MemberValue, Member);
+                if RType.Kind = tkDynArray then begin
                    DynArraySetLength(PPointer(SubVal.GetReferenceToRawData)^, SubVal.TypeInfo, 1, @J);
+                   if (MemberValue is TRttiProperty) and (PropGetterType(TRttiProperty(MemberValue)) = pgtMethod) then begin
+                      WriteMember<IJSONArray, Integer>(SubVal.GetReferenceToRawData,
+                                          0,
+                                          RType,
+                                          TRttiProperty(MemberValue).PropertyType,
+                                          IJSONData.A[Member]);
+
+                   end;
                    SetValue<String>(Data, MemberValue,'', SubVal );
-               end;
+                   Exit;
+                end;
+             end;
 
-            end;
+             for I := 0 to J-1 do begin
+                 if DataType <> dtArray then
+                    SubArr := IJSONData.A[Member];
+                 WriteMember<IJSONArray, Integer>
+                            (SubVal.GetReferenceToRawArrayElement(I),
+                             I,
+                             GetMemberTypeInfo(MemberValue),
+                             MemberValue,
+                             SubArr);
+             end;
 
-            for I := 0 to J-1 do begin
-                if DataType <> dtArray then
-                   SubArr := IJSONData.A[Member];
-                WriteMember<IJSONArray, Integer>
-                           (SubVal.GetReferenceToRawArrayElement(I),
-                            I,
-                            GetMemberTypeInfo(MemberValue),
-                            MemberValue,
-                            SubArr);
-            end;
+             if DataType = dtArray then
+                SubVal.ExtractRawData(Data)
+             else SetValue<String>(Data, MemberValue,'', SubVal );
 
-            if DataType = dtArray then
-               SubVal.ExtractRawData(Data);
-
-          finally
-            ClearArrayRawData(MemberValue);
+           finally
+             ClearArrayRawData(MemberValue);
+           end;
           end;
-        end;
-      end;
+       end;
 
-    tkRecord: begin
-        if (MemberValue.ClassType = TRttiDynamicArrayType) or (MemberValue.ClassType = TRttiArrayType) then
-           WriteRecord(GetMemberTypeInfo(MemberValue), Data, IJSonData.O[Member])
-        else begin
-           P := IValueData(TValueData( GetValue<Typ>(Data, MemberValue, Member) ).FValueData).GetReferenceToRawData;
-           WriteRecord(GetMemberTypeInfo(MemberValue), P, IJSonData.O[Member]);
-           TValue.Make(P, GetMemberTypeInfo(MemberValue), SubVal);
-           SetValue<Typ>(Data, MemberValue, Member, SubVal );
-        end;
-    end;
+    tkRecord:
+       begin
+         if (MemberValue.ClassType = TRttiDynamicArrayType) or (MemberValue.ClassType = TRttiArrayType) then
+            WriteRecord(GetMemberTypeInfo(MemberValue), Data, IJSonData.O[Member])
+         else begin
+            P := IValueData(TValueData( GetValue<Typ>(Data, MemberValue, Member) ).FValueData).GetReferenceToRawData;
+            WriteRecord(GetMemberTypeInfo(MemberValue), P, IJSonData.O[Member]);
+            TValue.Make(P, GetMemberTypeInfo(MemberValue), SubVal);
+            SetValue<Typ>(Data, MemberValue, Member, SubVal );
+         end;
+       end;
 
     tkInterface:
-      if (TypeInfo(ISuperObject) = GetMemberTypeInfo(MemberValue)) And (IJsonData.Ancestor[Member].DataType = dtObject) then
-          SetValue<Typ>(Data, MemberValue, Member, TValue.From<ISuperObject>(IJsonData.O[Member].Clone))
-      else
-      if (TypeInfo(ISuperArray) = GetMemberTypeInfo(MemberValue)) And (IJsonData.Ancestor[Member].DataType = dtArray) then
-          SetValue<Typ>(Data, MemberValue, Member, TValue.From<ISuperArray>(IJsonData.A[Member].Clone));
+       if (TypeInfo(ISuperObject) = GetMemberTypeInfo(MemberValue)) And (IJsonData.Ancestor[Member].DataType = dtObject) then
+           SetValue<Typ>(Data, MemberValue, Member, TValue.From<ISuperObject>(IJsonData.O[Member].Clone))
+       else
+       if (TypeInfo(ISuperArray) = GetMemberTypeInfo(MemberValue)) And (IJsonData.Ancestor[Member].DataType = dtArray) then
+           SetValue<Typ>(Data, MemberValue, Member, TValue.From<ISuperArray>(IJsonData.A[Member].Clone));
   end;
 end;
 
@@ -3086,7 +3138,11 @@ begin
             PInt64(@Result)^ := JSON.Cast.AsInteger;
 
          tkString:
+           {$IFDEF NEXTGEN}
+            PString(@Result)^ := JSON.Cast.AsString;
+           {$ELSE}
             PAnsiString(@Result)^ := AnsiString(JSON.Cast.AsString);
+           {$ENDIF}
 
          tkDynArray, tkArray: begin
             _Array := JSON.AsArray;
