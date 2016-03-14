@@ -2375,10 +2375,12 @@ begin
                                           RType,
                                           TRttiProperty(MemberValue).PropertyType,
                                           IJSONData.A[Member]);
+                      SetValue<String>(Data, MemberValue,'', SubVal );
+                      Exit;
 
-                   end;
-                   SetValue<String>(Data, MemberValue,'', SubVal );
-                   Exit;
+                   end else
+                      SetValue<String>(Data, MemberValue,'', SubVal );
+                   
                 end;
              end;
 
