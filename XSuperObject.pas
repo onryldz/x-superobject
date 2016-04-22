@@ -203,6 +203,7 @@ type
     constructor Create(JSON: String = '{}'; const CheckDate: Boolean = True); overload;
     constructor Create(JSON: T; const CheckDate: Boolean = True); overload;
     constructor CreateCasted(Value: IJSONAncestor; const CheckDate: Boolean = True);
+    constructor CreateWithEscape(JSON: String = '{}'; const CheckDate: Boolean = True);
     destructor Destroy; override;
     property Null[V: Typ]: TMemberStatus read GetNull write SetNull;
     property S[V: Typ]: String read GetString write SetString;
@@ -382,8 +383,8 @@ type
     procedure SetData(V: String; Data: Variant); overload; inline;
     procedure SetData(V: String; Data: Variant; AFormatSettings: TFormatSettings); overload;
 
-    class function ParseStream(Stream: TStream): TSuperObject;
-    class function ParseFile(FileName: String): TSuperObject;
+    class function ParseStream(Stream: TStream; CheckDate: Boolean = True): TSuperObject;
+    class function ParseFile(FileName: String; CheckDate: Boolean = True): TSuperObject;
 
     procedure SaveTo(Stream: TStream; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload; override;
     procedure SaveTo(AFile: String; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload; override;
@@ -818,6 +819,11 @@ begin
   FCheckDate := CheckDate;
 end;
 
+constructor TBaseJSON<T, Typ>.CreateWithEscape(JSON: String; const CheckDate: Boolean);
+begin
+  Create(LimitedStrToUTF16(JSON), CheckDate);
+end;
+
 function TBaseJSON<T, Typ>.DefaultValueClass<TT>(const Value): TT;
 var
   r: TRttiContext;
@@ -1243,26 +1249,26 @@ begin
   Inc(FOffset);
 end;
 
-class function TSuperObject.ParseFile(FileName: String): TSuperObject;
+class function TSuperObject.ParseFile(FileName: String; CheckDate: Boolean): TSuperObject;
 var
   Strm: TFileStream;
 begin
   Strm := TFileStream.Create(FileName, fmOpenRead, fmShareDenyWrite);
   try
-    Result := ParseStream(Strm);
+    Result := ParseStream(Strm, CheckDate);
   finally
     Strm.Free;
   end;
 end;
 
-class function TSuperObject.ParseStream(Stream: TStream): TSuperObject;
+class function TSuperObject.ParseStream(Stream: TStream; CheckDate: Boolean): TSuperObject;
 var
   Strm: TStringStream;
 begin
   Strm := TStringStream.Create;
   try
     Strm.LoadFromStream(Stream);
-    Result := TSuperObject.Create( Strm.DataString);
+    Result := TSuperObject.Create(Strm.DataString, CheckDate);
   finally
     Strm.Free;
   end;

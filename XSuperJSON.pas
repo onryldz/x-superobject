@@ -562,6 +562,8 @@ type
     property Success: Boolean read FSuccess;
   end;
 
+  function LimitedStrToUTF16(const Str: String): String;
+
 implementation
 
 uses
@@ -636,6 +638,36 @@ var
         #34{"}: Result := Result + '\"';
         #92{\}: Result := Result + '\\';
         #127..#65535: Result := Result + ChrtoUTF16(Ord(Tmp^));
+      else
+        Result := Result + Tmp^;
+      end;
+      Inc(Tmp);
+    end;
+  end;
+
+  function LimitedStrToUTF16(const Str: String): String;
+  var
+    Tmp: PWideChar;
+  begin
+    if Str = #0 then Exit(ChrToUtf16(0));
+    Result := '';
+    if Str = '' then
+       Exit
+    else
+       Tmp := PWideChar(Pointer(Str));
+    while Tmp^ <> #0 do
+    begin
+      case Tmp^ of
+        #1..#31: case Tmp^ of
+                  #8 : Result := Result + '\b';
+                  #9 : Result := Result + '\t';
+                  #10: Result := Result + '\n';
+                  //#11: Result := Result + '\v';
+                  #12: Result := Result + '\f';
+                  #13: Result := Result + '\r';
+               else
+                  Result := Result + ChrtoUTF16(Ord(Tmp^))
+               end;
       else
         Result := Result + Tmp^;
       end;
