@@ -565,6 +565,8 @@ type
   public
     function AsJSON(const Ident: Boolean = False; const UniversalTime: Boolean = False): String;
     function AsJSONObject: ISuperObject;
+    procedure AssignFromJSON(const JSON: String); overload;
+    procedure AssignFromJSON(JSON: ISuperObject); overload;
     constructor FromJSON(const JSON: String); overload;
     constructor FromJSON(JSON: ISuperObject); overload;
     constructor FromJSON(const JSON: String; CreateArgs: Array of TValue; const ConstructMethod: String = 'Create'); overload;
@@ -1603,6 +1605,16 @@ begin
   finally
     Result := IResult;
   end;
+end;
+
+procedure TSuperObjectHelper.AssignFromJSON(const JSON: String);
+begin
+  TSerializeParse.WriteObject(Self, SO(JSON));
+end;
+
+procedure TSuperObjectHelper.AssignFromJSON(JSON: ISuperObject);
+begin
+  TSerializeParse.WriteObject(Self, JSON);
 end;
 
 constructor TSuperObjectHelper.FromJSON(const JSON: String; CreateArgs: array of TValue; const ConstructMethod: String);
