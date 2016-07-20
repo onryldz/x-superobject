@@ -30,6 +30,8 @@ unit XSuperObject;
 
 interface
 
+{$I XSuperObject.inc}
+
 uses
   Classes,
   Variants,
@@ -38,15 +40,27 @@ uses
   XSuperJSON,
   RTTI,
   TypInfo,
-  DB,
-  Generics.Collections,
-  IdGlobal,
-  IdCoderMIME;
+  Generics.Collections
+  {$IFDEF SP_DATASET}
+  ,DB
+  {$ENDIF}
+  {$IFDEF SP_STREAM}
+  ,IdGlobal
+  ,IdCoderMIME
+  {$ENDIF}
+  ;
+
+{$IFDEF XE2UP}
+  const CharIndex = Low(String);
+{$ELSE}
+  const CharIndex = 1;
+{$ENDIF}
 
 type
 
-  SOException = class(Exception);
-  SOInvalidDate = class(SOException);
+  SOException = class(Exception) end;
+  SOInvalidDate = class(SOException) end;
+  ESerializeError = class(Exception) end;
 
   ISuperObject = interface;
   ISuperArray = interface;
@@ -66,8 +80,11 @@ type
     property Name: String read FName write FName;
   end;
 
+  TRevalOption = (roNone, roEmptyArrayToNull);
+
   REVAL = class(TCustomAttribute)
   private
+    FOption: TRevalOption;
     FEqual: Variant;
     FValue: Variant;
   public
@@ -79,9 +96,11 @@ type
     constructor Create(EQVal: Integer); overload;
     constructor Create(EQVal: Double); overload;
     constructor Create(EQVal: Boolean); overload;
+    constructor Create(Option: TRevalOption); overload;
     function CheckEQ(Val: TValue): Boolean;
     property Equal: Variant read FEqual;
     property Value: Variant read FValue;
+    property Option: TRevalOption read FOption;
   end;
 
   DISABLE = class(TCustomAttribute)
@@ -511,12 +530,17 @@ type
     class destructor Destroy;
     class function IsGenerics(Cls: TRttiType): Boolean; overload;
     class function IsGenerics(Cls: TClass): Boolean; overload;
+    class function IsCollection(Cls: TRttiType): Boolean; overload;
+    class function IsCollection(Cls: TClass): Boolean; overload; inline;
     class function GetGenericType(Cls: TClass): TGenericsType;
     class function GetGenericsCreateArgs(Cls: TRttiType): TArray<TValue>;
 
     // ** Read
+    {$IFDEF SP_STREAM}
     class procedure ReadStream(AStream: TStream; IResult: IJSONAncestor);
+    {$ENDIF}
     class procedure ReadGeneric(AObject: TObject; IResult: ISuperArray);
+    class procedure ReadCollection(ACollection: TCollection; IResult: ISuperArray);
     class procedure ReadObject(AObject: TObject; IResult: ISuperObject);
     class procedure ReadRecord(Info: PTypeInfo; ARecord: Pointer; IResult: ISuperObject);
     class function  ReadRecordEx<T>(Rec: T): ISuperObject;
@@ -529,8 +553,11 @@ type
     class procedure ReadVariantOfObject(Val: Variant; const Name: String; IJsonData: ISuperObject);
 
     // ** Write
+    {$IFDEF SP_STREAM}
     class procedure WriteStream(AStream: TStream; IData: IJSONAncestor);
+    {$ENDIF}
     class procedure WriteGeneric(AObject: TObject; IData: ISuperArray);
+    class procedure WriteCollection(ACollection: TCollection; IData: ISuperArray);
     class procedure WriteObject(AObject: TObject; IData: ISuperObject);
     class procedure WriteRecord(Info: PTypeInfo; ARecord: Pointer; IData: ISuperObject);
     class procedure WriteRecordEx<T>(Rec: T; IData: ISuperObject);
@@ -587,9 +614,11 @@ type
     class function Parse<T>(const Value: String): T; overload;
     class function Parse<T>(JSON: ISuperObject): T; overload;
     class function SuperObject<T>(Value: T): ISuperObject; overload;
+    {$IFDEF SP_DATASET}
     class function SuperObject(Value: TDataSet): ISuperObject; overload;
+    class function Stringify(Value: TDataSet): String; overload;
+    {$ENDIF}
     class function SuperObject(Value: TValue): ISuperObject; overload;
-    class function Stringfy(Value: TDataSet): String; overload;
     class function Stringify<T>(Value: T; Indent: Boolean = False; UniversalTime: Boolean = True): String; overload;
     class function Stringify(Value: TValue; Indent: Boolean = False; UniversalTime: Boolean = True): String; overload;
   end;
@@ -598,21 +627,6 @@ type
   function SO(const Args: array of const): ISuperObject; overload;
   function SA(JSON: String = '[]'): ISuperArray; overload;
   function SA(const Args: array of const): ISuperArray; overload;
-
-  // ** Zero Based Strings Definations...
- {$UNDEF XE2UP}
- {$IFDEF DCC}
-   {$IF CompilerVersion >= 24}
-     {$DEFINE XE2UP}
-   {$ENDIF}
- {$ENDIF}
-
- {$IFDEF XE2UP}
-   const CharIndex = Low(String);
- {$ELSE}
-   const CharIndex = 1;
- {$ENDIF}
-
 
 implementation
 
@@ -678,19 +692,19 @@ begin
             if PVarRec(@Args[I]).VPointer = nil then
                Result.Add(TJSONNull.Create(False))
             else
-               Result.Add(TJSONInteger.Create(PtrInt(PVarRec(@Args[I]).VPointer)));
+               Result.Add(TJSONInteger.Create(NativeInt(PVarRec(@Args[I]).VPointer)));
           vtVariant:
             Result.Add(PVarRec(@Args[I]).VVariant^);
           vtObject:
             if PVarRec(@Args[I]).VPointer = nil then
                Result.Add(TJSONNull.Create(False))
             else
-               Result.Add(TJSONInteger.Create(PtrInt(PVarRec(@Args[I]).VPointer)));
+               Result.Add(TJSONInteger.Create(NativeInt(PVarRec(@Args[I]).VPointer)));
           vtClass:
             if PVarRec(@Args[I]).VPointer = nil then
                Result.Add(TJSONNull.Create(False))
             else
-               Result.Add(TJSONInteger.Create(PtrInt(PVarRec(@Args[I]).VPointer)));
+               Result.Add(TJSONInteger.Create(NativeInt(PVarRec(@Args[I]).VPointer)));
           else
             Assert(false);
       end;
@@ -1445,13 +1459,18 @@ begin
     Typ := Ctx.GetType(TypeInfo(T));
     if not Assigned(Typ) then
        Exit;
-    if Typ.IsInstance and TSerializeParse.IsGenerics(Typ) then
-    begin
-      Result := TValue.From<TObject>(TSerializeParse.ObjectConstructor(Typ.AsInstance.MetaclassType)).AsType<T>;
-      TSerializeParse.WriteGeneric(TValue.From<T>(Result).AsObject, Self);
-    end
-    else
-      raise SOException.Create('Unsupported type.');
+    if Typ.IsInstance then begin
+       if TSerializeParse.IsGenerics(Typ) then begin
+          Result := TValue.From<TObject>(TSerializeParse.ObjectConstructor(Typ.AsInstance.MetaclassType)).AsType<T>;
+          TSerializeParse.WriteGeneric(TValue.From<T>(Result).AsObject, Self);
+          Exit;
+       end else if TSerializeParse.IsCollection(Typ) then begin
+          Result := TValue.From<TObject>(TSerializeParse.ObjectConstructor(Typ.AsInstance.MetaclassType)).AsType<T>;
+          TSerializeParse.WriteCollection(TValue.From<T>(Result).AsObject as TCollection, Self);
+          Exit;
+       end;
+    end;
+    raise SOException.Create('Unsupported type.');
   except
     Ctx.Free;
     raise;
@@ -1663,7 +1682,8 @@ begin
   for Prop in aType.GetProperties do
   begin
     if (not (Prop.Visibility in TSerializeParseOptions.Visibilities))
-       {$IFDEF AUTOREFCOUNT} or (Prop.Parent.AsInstance.MetaclassType = TObject){$ENDIF} then Continue;
+       {$IFDEF AUTOREFCOUNT} or (Prop.Parent.AsInstance.MetaclassType = TObject){$ENDIF}
+       or (Prop.Parent.AsInstance.MetaclassType = TCollectionItem) then Continue;
 
     MemberName := Prop.Name;
     Attributes := Prop.GetAttributes;
@@ -1943,6 +1963,23 @@ begin
   end;
 end;
 
+class function TSerializeParse.IsCollection(Cls: TRttiType): Boolean;
+begin
+  if Cls = Nil then Exit(False);
+  Result := Cls.AsInstance.MetaclassType.InheritsFrom(TCollection);
+end;
+
+class function TSerializeParse.IsCollection(Cls: TClass): Boolean;
+begin
+  Result := False;
+  with TRttiContext.Create do
+    try
+      Result := IsCollection(GetType(Cls));
+    finally
+      Free;
+    end;
+end;
+
 class function TSerializeParse.IsDisabled(const Attributes: TArray<TCustomAttribute>): Boolean;
 begin
   Result := GetAttribute(DISABLE, Attributes) <> Nil;
@@ -2007,7 +2044,6 @@ begin
         end
      end;
   end;
-  //FGenericsCache.Add(C, TGenericsInfo.Create(Nil, False, Nil));
 end;
 
 class function TSerializeParse.ObjectConstructor(
@@ -2070,6 +2106,19 @@ begin
   end;
 end;
 
+class procedure TSerializeParse.ReadCollection(ACollection: TCollection; IResult: ISuperArray);
+var
+  I, Len: Integer;
+  Item: TCollectionItem;
+begin
+  for I := 0 to ACollection.Count - 1 do
+  begin
+    Item := ACollection.Items[I];
+    if Item <> Nil then
+       ReadObject(Item, IResult.O[I])
+  end;
+end;
+
 class procedure TSerializeParse.ReadGeneric(AObject: TObject; IResult: ISuperArray);
 var
   I, Len: Integer;
@@ -2078,7 +2127,7 @@ var
 begin
   Info := FGenericsCache[AObject.ClassType];
   Len := Info.Count(AObject);
-  for I := 0 to Len - 1do
+  for I := 0 to Len - 1 do
   begin
     Item := Info.Item(AObject, I);
     if Item <> Nil then
@@ -2092,7 +2141,7 @@ var
   SubVal: TValue;
   Obj: TObject;
 begin
-  if MemberValue.IsEmpty then
+  if MemberValue.IsEmpty and not (RType.Kind in [tkArray, tkDynArray]) then
      IJSONDATA.Null[Member] := jNull
   else
   if RType = TypeInfo(TDateTime) then
@@ -2130,13 +2179,15 @@ begin
        if MemberValue.IsObject and (MemberValue.AsObject <> Nil) then
        begin
           Obj := MemberValue.AsObject;
-          if Obj is TStream then
-          begin
+          if Obj is TStream then begin
              IJSONData.S[Member] := '';
+             {$IFDEF SP_STREAM}
              ReadStream(TStream(Obj), IJSONData.Ancestor[Member])
-          end
-          else if IsGenerics(Obj.ClassType) then
+             {$ENDIF}
+          end else if IsGenerics(Obj.ClassType) then
              ReadGeneric(Obj, IJSonData.A[Member])
+          else if IsCollection(Obj.ClassType) then
+             ReadCollection(Obj as TCollection, IJSONData.A[Member])
           else
              ReadObject(Obj, IJSonData.O[Member]);
        end;
@@ -2148,15 +2199,17 @@ begin
        if TypeInfo(Typ) = TypeInfo(Integer) then
           ReadVariantOfArray(MemberValue.AsVariant, ISuperArray(IJsonData) );
 
-    tkArray, tkDynArray: begin
-       IJsonData.A[Member];
-       with MemberValue do
-           for I := 0 to GetArrayLength - 1 do
-           begin
-               SubVal := GetArrayElement(I);
-               ReadMember<IJSONArray, Integer>( I, SubVal.TypeInfo, SubVal, IJsonData.A[Member]);
-           end;
-    end;
+    tkArray, tkDynArray:
+       if not MemberValue.IsArray then
+          IJSONDATA.Null[Member] := jNull
+       else begin
+          IJsonData.A[Member];
+          with MemberValue do
+              for I := 0 to GetArrayLength - 1 do begin
+                  SubVal := GetArrayElement(I);
+                  ReadMember<IJSONArray, Integer>( I, SubVal.TypeInfo, SubVal, IJsonData.A[Member]);
+              end;
+       end;
 
     tkRecord:
        ReadRecord(MemberValue.TypeInfo, MemberValue.GetReferenceToRawData, IJSonData.O[Member]);
@@ -2182,6 +2235,8 @@ begin
        IJsonData.Add(I);
 end;
 
+{$IFDEF SP_STREAM}
+
 function Base64Encode(const Bytes: TIdBytes): String;
 var
   Encoder: TIdEncoderMIME;
@@ -2203,6 +2258,7 @@ begin
   AStream.Read(ByteArray[0], AStream.Size);
   (IResult as TJSONString).Value := Base64Encode(ByteArray);
 end;
+{$ENDIF}
 
 class procedure TSerializeParse.ReadTValueOfArray(Val: TValue;
   IJsonData: ISuperArray);
@@ -2276,6 +2332,32 @@ begin
 
 end;
 
+class procedure TSerializeParse.WriteCollection(ACollection: TCollection; IData: ISuperArray);
+var
+  ItemType: TRttiType;
+  Item: TCollectionItem;
+  JMembers: IMember;
+begin
+  ItemType := Nil;
+  with TRttiContext.Create do
+      try
+        ItemType := GetType(ACollection.ItemClass)
+      finally
+        Free;
+      end;
+
+  if ItemType = Nil then
+     raise ESerializeError.CreateFmt('Unknown collection item type (%s).', [ACollection.ItemClass.ClassName]);
+
+  for JMembers in IData do
+      if JMembers.DataType <> dtObject then
+         Continue
+      else begin
+         Item := ACollection.Add;
+         WriteMembers(Item, ItemType, JMembers.AsObject);
+      end;
+end;
+
 class procedure TSerializeParse.WriteGeneric(AObject: TObject; IData: ISuperArray);
 var
   Info: TGenericsInfo;
@@ -2304,14 +2386,16 @@ var
   SubArr: ISuperArray;
   DataType: TDataType;
   Obj: TObject;
+  Ancestor: IJSONAncestor;
 begin
   if not IJsonData.Contains(Member) then
      Exit;
 
   if (RType = TypeInfo(TDateTime)) or (RType = TypeInfo(TDate)) or (RType = TypeInfo(TTime)) then
   begin
-    if IJSONData.Ancestor[Member].DataType <> dtNull then
-       SetValue<Typ>(Data, MemberValue, Member, TValue.From<TDateTime>(IJSONData.Ancestor[Member].AsVariant))
+    Ancestor := IJSONData.Ancestor[Member];
+    if not (Ancestor.DataType in [dtNull, dtString]) then
+       SetValue<Typ>(Data, MemberValue, Member, TValue.From<TDateTime>(Ancestor.AsVariant))
   end
   else
   case RType.Kind of
@@ -2350,10 +2434,14 @@ begin
        begin
           if CheckObject<Typ>(Data, MemberValue, Member, Obj) then
              if (Obj is TStream) then begin
+                {$IFDEF SP_STREAM}
                 if IJSONData.Null[Member] = jAssigned then
                    WriteStream(TStream(Obj), IJSonData.Ancestor[Member])
+                {$ENDIF}
              end else if IsGenerics(Obj.ClassType) then
                 WriteGeneric(Obj, IJSONData.A[Member])
+             else if IsCollection(Obj.ClassType) then
+                WriteCollection(Obj as TCollection, IJSONData.A[Member])
              else
                 WriteObject(Obj, IJSonData.O[Member]);
        end;
@@ -2535,6 +2623,7 @@ begin
   SetValue<String>(Data, Member, '', Val);
 end;
 
+{$IFDEF SP_STREAM}
 function Base64Decode(const EncodedText: string): TBytesStream;
 var
   Decoder: TIdDecoderMIME;
@@ -2567,6 +2656,7 @@ begin
     Setter.Free;
   end;
 end;
+{$ENDIF}
 
 { TSuperRecord<T> }
 
@@ -2973,55 +3063,79 @@ end;
 
 function REVAL.CheckEQ(Val: TValue): Boolean;
 begin
-  Result := Val.AsVariant = FEqual;
+  case FOption of
+    roNone:
+      Result := Val.AsVariant = FEqual;
+    roEmptyArrayToNull:
+      Result := Val.GetArrayLength = 0;
+  end;
 end;
 
 constructor REVAL.Create(EQVal, NewVal: Integer);
 begin
+  FOption := roNone;
   FEqual := EQVal;
   FValue := NewVal;
 end;
 
 constructor REVAL.Create(EQVal, NewVal: String);
 begin
+  FOption := roNone;
   FEqual := EQVal;
   FValue := NewVal;
 end;
 
 constructor REVAL.Create(EQVal, NewVal: Double);
 begin
+  FOption := roNone;
   FEqual := EQVal;
   FValue := NewVal;
 end;
 
 constructor REVAL.Create(EQVal: String);
 begin
+  FOption := roNone;
   FEqual := EQVal;
   FValue := Variants.Null;
 end;
 
 constructor REVAL.Create(EQVal, NewVal: Boolean);
 begin
+  FOption := roNone;
   FEqual := EQVal;
   FValue := NewVal;
 end;
 
 constructor REVAL.Create(EQVal: Integer);
 begin
+  FOption := roNone;
   FEqual := EQVal;
   FValue := Variants.Null;
 end;
 
 constructor REVAL.Create(EQVal: Double);
 begin
+  FOption := roNone;
   FEqual := EQVal;
   FValue := Variants.Null;
 end;
 
 constructor REVAL.Create(EQVal: Boolean);
 begin
+  FOption := roNone;
   FEqual := EQVal;
   FValue := Variants.Null;
+end;
+
+constructor REVAL.Create(Option: TRevalOption);
+const
+  EMPTY_DATE: TDateTime = 0;
+begin
+  FOption := Option;
+  case FOption of
+    roEmptyArrayToNull:
+       FValue := Variants.Null;
+  end;
 end;
 
 { TSerializeParseOptions }
@@ -3186,14 +3300,17 @@ begin
   end;
 end;
 
-class function TJSON.Stringfy(Value: TDataSet): String;
-begin
-  Result := SuperObject(Value).AsJSON(False, True);
-end;
 
 class function TJSON.Stringify(Value: TValue; Indent, UniversalTime: Boolean): String;
 begin
   Result := SuperObject(Value).AsJSON(Indent, UniversalTime);
+end;
+
+{$IFDEF SP_DATASET}
+
+class function TJSON.Stringify(Value: TDataSet): String;
+begin
+  Result := SuperObject(Value).AsJSON(False, True);
 end;
 
 class function TJSON.SuperObject(Value: TDataSet): ISuperObject;
@@ -3258,6 +3375,7 @@ begin
   end;
   Result := TSuperObject.CreateCasted(Return.Self);
 end;
+{$ENDIF}
 
 class function TJSON.Stringify<T>(Value: T; Indent: Boolean; UniversalTime: Boolean): String;
 begin
