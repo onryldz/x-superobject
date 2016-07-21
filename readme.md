@@ -423,6 +423,8 @@ TTest = class
      Filter: String;
     [DISABLE]
      BlaBlaBla: String;
+    [REVAL(roEmptyArrayToNull)]
+     Arr: TArray<String>;
   end;
 
   var X: Test;
@@ -432,6 +434,7 @@ TTest = class
     X.Unt := 2;
     X.Filter := '';
     X.BlaBlaBla := ':)';
+    SetLength(X.Arr, 0);
     ShowMessage(X.AsJSON);
   end;
 ```
@@ -440,6 +443,7 @@ TTest = class
  {
     "Type": "XType", 
     "Unit": 2, 
-    "Filter": "*"
+    "Filter": "*",
+    "Arr": null
  }
 ```
