@@ -410,6 +410,52 @@ type
     S := TJSON.Stringify<TArray<TRec>>(Test);
   end;
 ```
+Collection (Limited)
+```pascal
+type
+  TXCollectionItem = class(TCollectionItem)
+  private
+    FA: String;
+    FB: Integer;
+  public
+    property A: String read FA write FA;
+    property B: Integer read FB write FB;
+  end;
+  
+  TXCollection = class(TCollection)
+  public
+    constructor Create; reintroduce;
+  end;
+  
+  TTest = class
+  private
+    FCollection: TXColleciton;
+  public
+    destructor Destroy; override;
+    property Collection: TCollection read FCollection write FCollection;
+  end;
+  
+  implementation
+  ...
+  
+  constructor TXCollection.Create;
+  begin
+    inherited Create(TXCollectionItem);
+  end;
+  
+  destructor TTest.Destroy;
+  begin
+    FCollection.Free;
+    inherited;
+  end;
+  
+  var
+    Test: TTest;
+  begin
+    Test := TTest.FromJSON('{"Collection": [{"A": "Item 1", "B": 1}, {"A": "Item 2", "B": 1}]}');
+    S := Test.AsJSON;
+  end;
+```
 ----------
 ###Marshalling **Attributes**
 ```pascal
