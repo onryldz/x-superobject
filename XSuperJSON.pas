@@ -166,6 +166,13 @@ type
     property Value;
   end;
 
+  IJSONRaw = interface(IJSONString)['{EF5EF422-1A81-49EA-A3E0-9E7D5B5CC1E2}']end;
+  TJSONRaw = class(TJSONString, IJSONRaw)
+  public
+    procedure AsJSONString(Str: TJSONWriter); override;
+    property Value;
+  end;
+
   IJSONInteger = interface(IJSONValue<Int64>)['{E9D84348-9634-40F5-8A1F-FF006F45FC6D}']end;
   TJSONInteger = class(TJSONValue<Int64>, IJSONInteger)
   public
@@ -2322,6 +2329,13 @@ end;
 function TJSONBaseDate<T>.GetAsString: String;
 begin
    Result := FormatDateTime(FFormat, PDateTime(@FData)^);
+end;
+
+{ TJSONRaw }
+
+procedure TJSONRaw.AsJSONString(Str: TJSONWriter);
+begin
+  Str.AppendVal( Value );
 end;
 
 initialization

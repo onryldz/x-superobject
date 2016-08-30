@@ -361,6 +361,9 @@ type
     function GetCurrentValue: IJSONAncestor;
     function GetOffset: Integer;
     function GetExpr(const Code: String): ISuperExpression;
+    function GetRaw(V: String): String;
+    procedure SetRaw(V: String; Value: String);
+
 
     procedure Add(const Key: String; const Data: IJSONAncestor);
     procedure SetData(V: String; Data: Variant); overload;
@@ -380,6 +383,7 @@ type
     function Where(const Cond: TCondCallBack<IMember>): ISuperObject;
     function Delete(const Cond: TCondCallBack<IMember>): ISuperObject;
     function Cast: ICast;
+    property Raw[V: String]: String read GetRaw write SetRaw;
   end;
 
   TSuperObject = class(TBaseJSON<IJSONObject, String>, ISuperObject)
@@ -390,7 +394,9 @@ type
     function GetCurrentKey: String;
     function GetCurrentValue: IJSONAncestor;
     function GetOffset: Integer;
-    function  GetExpr(const Code: String): ISuperExpression;
+    function GetExpr(const Code: String): ISuperExpression;
+    function GetRaw(V: String): String;
+    procedure SetRaw(V: String; Value: String);
   protected
     function GetString(V: String): String; override;
     procedure SetNull(V: String; const Value: TMemberStatus); override;
@@ -861,6 +867,8 @@ begin
     Result := TJSONDate.Create(TDate(Value)) as TT
   else if TJSONTime.InheritsFrom(TT) then
     Result := TJSONTime.Create(TTime(Value)) as TT
+  else if TJSONRaw.InheritsFrom(TT) then
+    Result := TJSONRaw.Create(String(Value)) as TT
   else if TJSONArray.InheritsFrom(TT) then
   begin
     if Pointer(Value) <> Nil then
@@ -1255,6 +1263,11 @@ begin
   Result := FOffset;
 end;
 
+function TSuperObject.GetRaw(V: String): String;
+begin
+  Result := GetValue<TJSONRaw>(V).ValueEx<String>;
+end;
+
 function TSuperObject.GetString(V: String): String;
 begin
   Result := inherited GetString(V);
@@ -1373,6 +1386,11 @@ begin
        else
           AddPair(V, TJSONNull.Create(True));
   end;
+end;
+
+procedure TSuperObject.SetRaw(V, Value: String);
+begin
+  Member<TJSONRaw, String>(V, Value);
 end;
 
 procedure TSuperObject.Sort(Comparison: TJSONComparison<IMember>);
