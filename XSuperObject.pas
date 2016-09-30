@@ -2397,7 +2397,8 @@ end;
 class procedure TSerializeParse.WriteMember<T, Typ>(Data: Pointer; Member: Typ;
   RType: PTypeInfo; MemberValue: TRttiObject; IJsonData: IBaseJSON<T, Typ>);
 var
-  I,J: Integer;
+  I: Integer;
+  J: NativeInt;
   P: Pointer;
   V: Variant;
   SubVal: TValue;
