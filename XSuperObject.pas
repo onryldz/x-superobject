@@ -1,4 +1,4 @@
-﻿ (*
+ (*
   *                       XSuperObject - Simple JSON Framework
   *
   * The MIT License (MIT)
@@ -2379,6 +2379,9 @@ var
   Item: TObject;
   JMembers: IMember;
 begin
+  if IData.DatatYpe = dtNil then
+    Exit;
+
   Info := FGenericsCache[AObject.ClassType];
   for JMembers in IData do
       if JMembers.DataType <> dtObject then
@@ -2595,7 +2598,7 @@ begin
   Ctx := TRttiContext.Create;
   try
     Typ := Ctx.GetType(AObject.ClassType);
-    if not Assigned(Typ) then Exit;
+    if (not Assigned(Typ)) or (IData.DataType = dtNil) then Exit;
     WriteMembers(AObject, Typ, IData);
   finally
     Ctx.Free;
@@ -2611,7 +2614,8 @@ begin
   Ctx := TRttiContext.Create;
   try
     Typ := Ctx.GetType(Info);
-    if not Assigned(Typ) then Exit;
+    if (not Assigned(Typ)) or (IData.DataType = dtNil) then
+      Exit;
     WriteMembers(ARecord, Typ, IData);
   finally
     Ctx.Free;
