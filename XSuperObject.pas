@@ -1,4 +1,4 @@
-﻿ (*
+ (*
   *                       XSuperObject - Simple JSON Framework
   *
   * The MIT License (MIT)
@@ -1950,7 +1950,6 @@ class function TSerializeParse.PropGetterType(Prop: TRttiProperty): TPropertyGet
 var
   Getter: Pointer;
 begin
-  Getter := TRttiInstanceProperty(Prop).PropInfo^.GetProc;
   if Prop is TRttiInstanceProperty then begin
      Getter := TRttiInstanceProperty(Prop).PropInfo^.GetProc;
      if (IntPtr(Getter) and PROPSLOT_MASK) <> PROPSLOT_FIELD then
@@ -1989,7 +1988,6 @@ end;
 
 class function TSerializeParse.IsCollection(Cls: TClass): Boolean;
 begin
-  Result := False;
   with TRttiContext.Create do
     try
       Result := IsCollection(GetType(Cls));
@@ -2126,7 +2124,7 @@ end;
 
 class procedure TSerializeParse.ReadCollection(ACollection: TCollection; IResult: ISuperArray);
 var
-  I, Len: Integer;
+  I: Integer;
   Item: TCollectionItem;
 begin
   for I := 0 to ACollection.Count - 1 do
@@ -2356,7 +2354,6 @@ var
   Item: TCollectionItem;
   JMembers: IMember;
 begin
-  ItemType := Nil;
   with TRttiContext.Create do
       try
         ItemType := GetType(ACollection.ItemClass)
@@ -2382,6 +2379,9 @@ var
   Item: TObject;
   JMembers: IMember;
 begin
+  if IData.DatatYpe = dtNil then
+    Exit;
+
   Info := FGenericsCache[AObject.ClassType];
   for JMembers in IData do
       if JMembers.DataType <> dtObject then
@@ -2598,7 +2598,7 @@ begin
   Ctx := TRttiContext.Create;
   try
     Typ := Ctx.GetType(AObject.ClassType);
-    if not Assigned(Typ) then Exit;
+    if (not Assigned(Typ)) or (IData.DataType = dtNil) then Exit;
     WriteMembers(AObject, Typ, IData);
   finally
     Ctx.Free;
@@ -2614,7 +2614,8 @@ begin
   Ctx := TRttiContext.Create;
   try
     Typ := Ctx.GetType(Info);
-    if not Assigned(Typ) then Exit;
+    if (not Assigned(Typ)) or (IData.DataType = dtNil) then
+      Exit;
     WriteMembers(ARecord, Typ, IData);
   finally
     Ctx.Free;
@@ -3087,6 +3088,7 @@ begin
       Result := Val.AsVariant = FEqual;
     roEmptyArrayToNull:
       Result := Val.GetArrayLength = 0;
+    else raise Exception.CreateFmt('Unknown option: %d', [Ord(FOption)]);
   end;
 end;
 
