@@ -3400,7 +3400,7 @@ begin
                  Rec.D[FieldName] := AsDateTime;
               ftWideString:
                  Rec.S[FieldName] := AsWideString;
-              ftLargeint:
+              ftLargeint, ftAutoInc:
                  Rec.I[FieldName] := AsLargeInt;
               ftVariant:
                  Rec.V[FieldName] := AsVariant;

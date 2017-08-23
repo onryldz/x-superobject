@@ -51,6 +51,7 @@ type
   TJSONNull = class;
   TLexGenerator = class;
   TRoute = class;
+  PPosition = ^TPosition;
   TPosition = record
     Col: Integer;
     Line: Integer;
@@ -62,8 +63,8 @@ type
 
   TJSONSyntaxError = class(Exception)
   public
-    constructor Create(const Msg: String; Pos: TPosition);
-    constructor CreateFmt(const Msg: String; const Args: array of TVarRec; Pos: TPosition);
+    constructor Create(const Msg: String; Pos: PPosition);
+    constructor CreateFmt(const Msg: String; const Args: array of TVarRec; Pos: PPosition);
   end;
 
   // ## JSONWriter
@@ -517,7 +518,7 @@ type
     FBuffer: TLexBuff;
     FEscapeBuff: TLexBuff;
     FCurr: PWideChar;
-    FCurrPos: TPosition;
+    FCurrPos: PPosition;
     FLexem: ILexeme;
     FLexG: TLexGrammar;
     FEscapeSupport: Boolean;
@@ -536,6 +537,7 @@ type
     function  CheckKill(LTyp: TLexemType): Boolean; overload;
     function  CheckKill(LTyp: TLexemTypes): TLexemType; overload;
     function  Current: ILexeme; inline;
+    property CurrPos: PPosition read FCurrPos;
   end;
 
   TSuperParser = class
@@ -1179,8 +1181,9 @@ begin
      FEscapeRoute := LexG.EscapeRoute;
      FEscapeBuff := TLexBuff.Create;
   end;
-
-
+  New(FCurrPos);
+  FCurrPos.Line := 1;
+  FCurrPos.Col := 0;
 end;
 
 procedure TLexGenerator.CreateLexeme;
@@ -1202,6 +1205,7 @@ begin
   FBuffer.Free;
   if FEscapeSupport then
      FEscapeBuff.Free;
+  Dispose(FCurrPos);
   inherited;
 end;
 
@@ -1278,7 +1282,7 @@ begin
            FBuffer.Add(FCurr^);
 
      if Trigger.BF and (FLexem.Pos.Col = 0) then
-        FLexem.Pos := FCurrPos;
+        FLexem.Pos := FCurrPos^;
 
      if not Trigger.BK then
      begin
@@ -1391,7 +1395,7 @@ begin
   until not LGen.CheckKill(ltVirgule);
 
   if not LGen.CheckKill(ltCRight) then
-     raise TJSONSyntaxError.Create(Err_UnexpectedEndOfInput, LGen.Current.Pos);
+     raise TJSONSyntaxError.Create(Err_UnexpectedEndOfInput, LGen.CurrPos);
 end;
 
 procedure TJSONBuilder.ReadFalse(var Val: IJSONAncestor);
@@ -1429,13 +1433,13 @@ begin
     begin
        LGen.KillLex;
        if not LGen.CheckKill(ltColon) then
-          raise TJSONSyntaxError.CreateFmt(Err_Expected, [':'], LGen.Current.Pos);
+          raise TJSONSyntaxError.CreateFmt(Err_Expected, [':'], LGen.CurrPos);
        TJSONObject(Val).AddPair(TJSONPair.Create(Name, ReadValue));
     end
   until not LGen.CheckKill(ltVirgule);
 
   if not LGen.CheckKill(ltBRight) then
-     raise TJSONSyntaxError.Create(Err_UnexpectedEndOfInput, LGen.Current.Pos);
+     raise TJSONSyntaxError.Create(Err_UnexpectedEndOfInput, LGen.CurrPos);
 end;
 
 procedure TJSONBuilder.ReadString(var Val: IJSONAncestor);
@@ -1701,13 +1705,13 @@ end;
 
 { TJSONSyntaxError }
 
-constructor TJSONSyntaxError.Create(const Msg: String; Pos: TPosition);
+constructor TJSONSyntaxError.Create(const Msg: String; Pos: PPosition);
 begin
   inherited CreateFmt(Msg + '. (Line: %d Col: %d)', [Pos.Line, Pos.Col]);
 end;
 
 constructor TJSONSyntaxError.CreateFmt(const Msg: String; const Args: array of TVarRec;
-  Pos: TPosition);
+  Pos: PPosition);
 begin
   Create( Format(Msg, Args), Pos );
 end;
@@ -1859,7 +1863,7 @@ begin
   if FExceptionBlock then
      Abort
   else
-     raise TJSONSyntaxError.CreateFmt(S, Args, LGen.Current.Pos);
+     raise TJSONSyntaxError.CreateFmt(S, Args, LGen.CurrPos);
 end;
 
 procedure TJSONInterpreter.CreateExcept(const S: String);
@@ -1867,7 +1871,7 @@ begin
   if FExceptionBlock then
      Abort
   else
-     raise TJSONSyntaxError.Create(S, LGen.Current.Pos);
+     raise TJSONSyntaxError.Create(S, LGen.CurrPos);
 end;
 
 destructor TJSONInterpreter.Destroy;
