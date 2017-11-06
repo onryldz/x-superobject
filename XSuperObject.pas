@@ -473,6 +473,7 @@ type
     procedure Sort(Comparison: TJSONComparison<IMember>); override;
     function Clone: ISuperArray;
     function AsArray: ISuperArray; override;
+    function AsObject: ISuperObject; override;
     function Where(const Cond: TCondCallBack<IMember>): ISuperArray;
     function T: TSuperArray; inline;
     function AsType<T>: T;
@@ -619,6 +620,7 @@ type
   public
     class function Parse<T>(const Value: String): T; overload;
     class function Parse<T>(JSON: ISuperObject): T; overload;
+    class function Parse<T>(JSON: ISuperArray): T; overload;
     class function SuperObject<T>(Value: T): ISuperObject; overload;
     {$IFDEF SP_DATASET}
     class function SuperObject(Value: TDataSet): ISuperObject; overload;
@@ -1465,6 +1467,11 @@ end;
 function TSuperArray.AsArray: ISuperArray;
 begin
   Result := Self;
+end;
+
+function TSuperArray.AsObject: ISuperObject;
+begin
+  Result := TSuperObject.CreateCasted(FJSONObj);
 end;
 
 function TSuperArray.AsType<T>: T;
@@ -3322,6 +3329,28 @@ begin
 end;
 
 
+class function TJSON.Parse<T>(JSON: ISuperArray): T;
+var
+  Ctx: TRttiContext;
+  _PResult: Pointer;
+  Typ: TRttiType;
+begin
+  Ctx := TRttiContext.Create;
+  try
+    Typ := Ctx.GetType(TypeInfo(T));
+    if not Assigned(Typ) then Exit(Default(T));
+    _PResult := @Result;
+    TSerializeParse.WriteMember<IJSONArray, Integer>(
+                        _PResult,
+                        0,
+                        Typ.Handle,
+                        Typ,
+                        JSON);
+   finally
+     Ctx.Free;
+   end;
+end;
+
 class function TJSON.Stringify(Value: TValue; Indent, UniversalTime: Boolean): String;
 begin
   Result := SuperObject(Value).AsJSON(Indent, UniversalTime);
@@ -3371,7 +3400,7 @@ begin
                  Rec.D[FieldName] := AsDateTime;
               ftWideString:
                  Rec.S[FieldName] := AsWideString;
-              ftLargeint:
+              ftLargeint, ftAutoInc:
                  Rec.I[FieldName] := AsLargeInt;
               ftVariant:
                  Rec.V[FieldName] := AsVariant;
