@@ -1551,7 +1551,7 @@ var
 begin
   S := TStringStream.Create( AsJSON(Ident, UniversalTime) );
   try
-     S.SaveToStream(S);
+     S.SaveToStream(Stream);
   finally
      S.Free;
   end;
