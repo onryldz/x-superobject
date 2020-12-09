@@ -646,7 +646,7 @@ var
                end;
         #34{"}: Result := Result + '\"';
         #92{\}: Result := Result + '\\';
-        #127..#65535: Result := Result + ChrtoUTF16(Ord(Tmp^));
+        //#127..#65535: Result := Result + ChrtoUTF16(Ord(Tmp^));
       else
         Result := Result + Tmp^;
       end;

@@ -19,7 +19,6 @@
 *.stat
 *.local
 *.identcache
-*.dproj
 *.~*
 __history/
 __recovery/

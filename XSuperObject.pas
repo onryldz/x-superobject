@@ -1,4 +1,4 @@
- (*
+﻿ (*
   *                       XSuperObject - Simple JSON Framework
   *
   * The MIT License (MIT)
@@ -1280,7 +1280,7 @@ begin
   Inc(FOffset);
 end;
 
-class function TSuperObject.ParseFile(FileName: String; CheckDate: Boolean): TSuperObject;
+class function TSuperObject.ParseFile(FileName: String; CheckDate: Boolean = True): TSuperObject;
 var
   Strm: TFileStream;
 begin
@@ -1295,11 +1295,21 @@ end;
 class function TSuperObject.ParseStream(Stream: TStream; CheckDate: Boolean): TSuperObject;
 var
   Strm: TStringStream;
+  preamble, tmp: TBytes;
+  preambleLength: integer;
+  enc: TEncoding;
 begin
   Strm := TStringStream.Create;
   try
     Strm.LoadFromStream(Stream);
-    Result := TSuperObject.Create(Strm.DataString, CheckDate);
+    SetLength(tmp,10);
+    strm.read(tmp, 10);
+    enc := nil;
+    preambleLength := TEncoding.GetBufferEncoding(tmp, enc);
+    if preambleLength <> 0 then
+      Result := TSuperObject.Create(enc.GetString(strm.Bytes, preambleLength, stream.Size - preambleLength), CheckDate)
+    else
+      Result := TSuperObject.Create(Strm.Datastring, CheckDate);
   finally
     Strm.Free;
   end;
