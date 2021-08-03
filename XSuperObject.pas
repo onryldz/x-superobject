@@ -1295,7 +1295,7 @@ end;
 class function TSuperObject.ParseStream(Stream: TStream; CheckDate: Boolean): TSuperObject;
 var
   Strm: TStringStream;
-  preamble, tmp: TBytes;
+  tmp: TBytes;
   preambleLength: integer;
   enc: TEncoding;
 begin
