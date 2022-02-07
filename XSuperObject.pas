@@ -954,7 +954,10 @@ function TBaseJSON<T, Typ>.GetDateTime(V: Typ): TDateTime;
 begin
   Result := 0;
   if Member(V) then
-     Result := GetValue<TJSONDateTime>(V).Value;
+  begin
+    if not VarIsNull(GetVariant(V)) then
+      Result := GetValue<TJSONDateTime>(V).Value;
+  end;
 end;
 
 function TBaseJSON<T, Typ>.GetDouble(V: Typ): Double;
